@@ -44,9 +44,17 @@ drop straight into a cron job or CI pipeline.
 - Certificate expiry, with a configurable warning window (`--warn-days`,
   default 14) and a MEDIUM-severity heads-up at 2x that window
 - Verification failures (expired, self-signed, hostname mismatch, broken chain)
-- Negotiated protocol version — flags SSLv2/v3, TLSv1.0/1.1
+- Negotiated protocol version — flags SSLv2/v3, TLSv1.0/1.1 (a server that
+  only speaks a legacy protocol is still identified and reported, not just
+  shown as a handshake failure)
 - Negotiated cipher — flags RC4/DES/EXPORT/NULL/MD5-based suites
+- Certificate signature algorithm — flags MD5/SHA-1 signatures
 - Missing Subject Alternative Names (legacy CN-only certs)
+
+Expiry, SAN and signature details are reported even when verification fails
+(expired, self-signed, wrong hostname). `--timeout SECONDS` sets the
+per-connection timeout (default 10). Hosts can be `host`, `host:port`,
+`[ipv6]` or `[ipv6]:port`; `--file` accepts `#` comments.
 
 ## Example cron entry
 
@@ -65,3 +73,10 @@ with alerting, dashboards, and SLOs.
 - Webhook/Slack notification mode
 - OCSP stapling / revocation checks
 - HSTS and other security-header checks alongside the cert check
+
+## Tests
+
+`tests/` runs every check against real local TLS servers (expired,
+expiring, self-signed, wrong-host, CN-only, SHA-1-signed, TLS 1.0/1.1-only,
+NULL-cipher) on Python 3.8 and current Python in Forgejo CI:
+`sh ci/run-tests.sh 3.13` reproduces it locally (needs docker).

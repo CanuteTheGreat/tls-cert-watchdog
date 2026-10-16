@@ -1,0 +1,22 @@
+name: tests
+
+# Runs the whole test suite (every documented CLI option and check) on every
+# push and PR, on the oldest Python the README promises and on current Python.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: linux-cross-x86_64
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.8", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test suite (python ${{ matrix.python }}, capped container)
+        run: sh ci/run-tests.sh "${{ matrix.python }}"
