@@ -5,8 +5,8 @@ weak protocol versions, and common misconfigurations across any number of
 hosts. No dependencies beyond the Python standard library (`ssl`, `socket`).
 
 By **Errant Solutions** (errant.solutions), makers of [Rustinion](https://rustinion.com)
-(device provisioning & monitoring), [Big Double D](https://oops.codes) (security
-awareness training), and [SSHerpa](https://ssherpa.app) (Android SSH client).
+(device provisioning & monitoring), [/Dev/Out Digital](https://devout.digital) (security
+awareness training), [OOPS!](https://oops.codes) (hands-on security labs), and [SSHerpa](https://ssherpa.app) (Android SSH client).
 
 ## Why
 
