@@ -277,6 +277,25 @@ class TestCertChecks(Base):
         self.assertIn("Connection failed", msgs)
 
 
+    def test_timeout_option_on_silent_server(self):
+        # A server that accepts TCP but never answers the TLS handshake (a hung
+        # service or a blackholing firewall): --timeout bounds how long it takes.
+        import time
+        lst = socket.socket()
+        lst.bind(("127.0.0.1", 0))
+        lst.listen(5)
+        port = lst.getsockname()[1]
+        try:
+            t = time.time()
+            code, r, msgs = self.check(port, "--timeout", "1", host="127.0.0.1")
+            elapsed = time.time() - t
+        finally:
+            lst.close()
+        self.assertEqual(code, 1)
+        self.assertIn("Connection failed", msgs)
+        self.assertIn("timed out", msgs)
+        self.assertLess(elapsed, 8)  # default would be 10s per attempt
+
 class TestCli(Base):
     def test_multiple_hosts_file_and_text_report(self):
         good = self.serve("g", days_valid=200)
