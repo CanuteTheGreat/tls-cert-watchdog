@@ -9,7 +9,9 @@
    "tests": [
     "tests/test_cert_watch.py::TestCertChecks::test_expiring_inside_warn_window_is_high",
     "tests/test_cert_watch.py::TestCertChecks::test_heads_up_at_twice_warn_window_is_medium",
-    "tests/test_cert_watch.py::TestCertChecks::test_warn_days_option"
+    "tests/test_cert_watch.py::TestCertChecks::test_warn_days_option",
+    "tests/test_contract.py::TestExpiry::test_boundaries",
+    "tests/test_contract.py::TestExpiry::test_expired"
    ],
    "flags": [
     "--warn-days"
@@ -22,7 +24,8 @@
     "tests/test_cert_watch.py::TestCertChecks::test_expired_cert_reports_verification_and_expiry",
     "tests/test_cert_watch.py::TestCertChecks::test_self_signed",
     "tests/test_cert_watch.py::TestCertChecks::test_hostname_mismatch",
-    "tests/test_accuracy.py::TestVerificationAgainstOpenSSL::test_verification_verdicts"
+    "tests/test_accuracy.py::TestVerificationAgainstOpenSSL::test_verification_verdicts",
+    "tests/test_contract.py::TestHandshakePaths::test_both_handshakes_fail"
    ]
   },
   {
@@ -31,7 +34,9 @@
    "tests": [
     "tests/test_cert_watch.py::TestDepth::test_server_accepting_legacy_alongside_tls13_is_high",
     "tests/test_cert_watch.py::TestDepth::test_no_tls13_is_low",
-    "tests/test_accuracy.py::TestProtocolsAgainstOpenSSL::test_accepted_versions"
+    "tests/test_accuracy.py::TestProtocolsAgainstOpenSSL::test_accepted_versions",
+    "tests/test_contract.py::TestProtocolScan::test_legacy_and_untested_versions",
+    "tests/test_contract.py::TestProtocolScan::test_probe_classifies_each_version"
    ],
    "flags": [
     "--no-protocol-scan"
@@ -44,22 +49,26 @@
     "tests/test_cert_watch.py::TestCertChecks::test_legacy_tls10_only_server",
     "tests/test_cert_watch.py::TestCertChecks::test_legacy_tls11_only_server",
     "tests/test_cert_watch.py::TestCertChecks::test_weak_cipher_is_flagged",
-    "tests/test_accuracy.py::TestProtocolsAgainstOpenSSL::test_accepted_versions"
+    "tests/test_accuracy.py::TestProtocolsAgainstOpenSSL::test_accepted_versions",
+    "tests/test_contract.py::TestHandshakePaths::test_legacy_only_server",
+    "tests/test_contract.py::TestHandshakePaths::test_weak_cipher_only_server"
    ]
   },
   {
    "id": "key",
    "text": "Key type and size",
    "tests": [
-    "tests/test_cert_watch.py::TestDepth::test_key_types_and_sizes"
+    "tests/test_cert_watch.py::TestDepth::test_key_types_and_sizes",
+    "tests/test_contract.py::TestKeys::test_key_types"
    ]
   },
   {
    "id": "signature",
-   "text": "Certificate signature algorithm \u2014 flags MD5/SHA-1 signatures",
+   "text": "Certificate signature algorithm — flags MD5/SHA-1 signatures",
    "tests": [
     "tests/test_cert_watch.py::TestCertChecks::test_sha1_signature_is_flagged",
-    "tests/test_accuracy.py::TestVerificationAgainstOpenSSL::test_verification_verdicts"
+    "tests/test_accuracy.py::TestVerificationAgainstOpenSSL::test_verification_verdicts",
+    "tests/test_contract.py::TestSignatureAndSan::test_sha1_signature"
    ]
   },
   {
@@ -67,14 +76,16 @@
    "text": "The chain the server sends",
    "tests": [
     "tests/test_cert_watch.py::TestDepth::test_chain_and_expiring_intermediate",
-    "tests/test_accuracy.py::TestVerificationAgainstOpenSSL::test_verification_verdicts"
+    "tests/test_accuracy.py::TestVerificationAgainstOpenSSL::test_verification_verdicts",
+    "tests/test_contract.py::TestChain::test_chain_entries_and_expiry"
    ]
   },
   {
    "id": "san",
    "text": "Missing Subject Alternative Names (legacy CN-only certs)",
    "tests": [
-    "tests/test_cert_watch.py::TestCertChecks::test_cn_only_cert_flags_missing_san"
+    "tests/test_cert_watch.py::TestCertChecks::test_cn_only_cert_flags_missing_san",
+    "tests/test_contract.py::TestSignatureAndSan::test_signature_oid_and_missing_san"
    ]
   },
   {
@@ -83,7 +94,9 @@
    "tests": [
     "tests/test_cert_watch.py::TestDepth::test_starttls_protocols",
     "tests/test_cert_watch.py::TestDepth::test_smtp_without_starttls_is_high",
-    "tests/test_cert_watch.py::TestDepth::test_target_parsing"
+    "tests/test_cert_watch.py::TestDepth::test_target_parsing",
+    "tests/test_contract.py::TestStartTLSDialogues::test_refusals",
+    "tests/test_contract.py::TestCliContract::test_starttls_none_overrides_the_scheme"
    ],
    "flags": [
     "--starttls"
@@ -114,7 +127,9 @@
    "tests": [
     "tests/test_cert_watch.py::TestCli::test_ipv6_bracket_syntax",
     "tests/test_cert_watch.py::TestDepth::test_target_parsing",
-    "tests/test_cert_watch.py::TestCli::test_multiple_hosts_file_and_text_report"
+    "tests/test_cert_watch.py::TestCli::test_multiple_hosts_file_and_text_report",
+    "tests/test_contract.py::TestCliContract::test_target_parsing_edges",
+    "tests/test_contract.py::TestCliContract::test_file_comments_and_errors"
    ],
    "flags": [
     "--file"
@@ -137,7 +152,8 @@
     "tests/test_cert_watch.py::TestCli::test_all_healthy_exit_zero",
     "tests/test_cert_watch.py::TestCli::test_no_hosts_is_usage_error",
     "tests/test_cert_watch.py::TestCli::test_bad_port_is_usage_error",
-    "tests/test_cert_watch.py::TestDepth::test_no_tls13_is_low"
+    "tests/test_cert_watch.py::TestDepth::test_no_tls13_is_low",
+    "tests/test_contract.py::TestCliContract::test_fail_on_levels"
    ],
    "flags": [
     "--fail-on"
