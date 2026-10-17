@@ -1,0 +1,201 @@
+{
+ "offline": false,
+ "optional_imports": [],
+ "hidden_options": [],
+ "claims": [
+  {
+   "id": "expiry",
+   "text": "Certificate expiry, with a configurable warning window (`--warn-days`,",
+   "tests": [
+    "tests/test_cert_watch.py::TestCertChecks::test_expiring_inside_warn_window_is_high",
+    "tests/test_cert_watch.py::TestCertChecks::test_heads_up_at_twice_warn_window_is_medium",
+    "tests/test_cert_watch.py::TestCertChecks::test_warn_days_option"
+   ],
+   "flags": [
+    "--warn-days"
+   ]
+  },
+  {
+   "id": "verification",
+   "text": "Verification failures (expired, self-signed, hostname mismatch, broken chain)",
+   "tests": [
+    "tests/test_cert_watch.py::TestCertChecks::test_expired_cert_reports_verification_and_expiry",
+    "tests/test_cert_watch.py::TestCertChecks::test_self_signed",
+    "tests/test_cert_watch.py::TestCertChecks::test_hostname_mismatch",
+    "tests/test_accuracy.py::TestVerificationAgainstOpenSSL::test_verification_verdicts"
+   ]
+  },
+  {
+   "id": "protocols",
+   "text": "Every protocol version the server accepts",
+   "tests": [
+    "tests/test_cert_watch.py::TestDepth::test_server_accepting_legacy_alongside_tls13_is_high",
+    "tests/test_cert_watch.py::TestDepth::test_no_tls13_is_low",
+    "tests/test_accuracy.py::TestProtocolsAgainstOpenSSL::test_accepted_versions"
+   ],
+   "flags": [
+    "--no-protocol-scan"
+   ]
+  },
+  {
+   "id": "negotiated",
+   "text": "Negotiated protocol and cipher",
+   "tests": [
+    "tests/test_cert_watch.py::TestCertChecks::test_legacy_tls10_only_server",
+    "tests/test_cert_watch.py::TestCertChecks::test_legacy_tls11_only_server",
+    "tests/test_cert_watch.py::TestCertChecks::test_weak_cipher_is_flagged",
+    "tests/test_accuracy.py::TestProtocolsAgainstOpenSSL::test_accepted_versions"
+   ]
+  },
+  {
+   "id": "key",
+   "text": "Key type and size",
+   "tests": [
+    "tests/test_cert_watch.py::TestDepth::test_key_types_and_sizes"
+   ]
+  },
+  {
+   "id": "signature",
+   "text": "Certificate signature algorithm \u2014 flags MD5/SHA-1 signatures",
+   "tests": [
+    "tests/test_cert_watch.py::TestCertChecks::test_sha1_signature_is_flagged",
+    "tests/test_accuracy.py::TestVerificationAgainstOpenSSL::test_verification_verdicts"
+   ]
+  },
+  {
+   "id": "chain",
+   "text": "The chain the server sends",
+   "tests": [
+    "tests/test_cert_watch.py::TestDepth::test_chain_and_expiring_intermediate",
+    "tests/test_accuracy.py::TestVerificationAgainstOpenSSL::test_verification_verdicts"
+   ]
+  },
+  {
+   "id": "san",
+   "text": "Missing Subject Alternative Names (legacy CN-only certs)",
+   "tests": [
+    "tests/test_cert_watch.py::TestCertChecks::test_cn_only_cert_flags_missing_san"
+   ]
+  },
+  {
+   "id": "starttls",
+   "text": "STARTTLS is picked automatically from the scheme or the well-known port",
+   "tests": [
+    "tests/test_cert_watch.py::TestDepth::test_starttls_protocols",
+    "tests/test_cert_watch.py::TestDepth::test_smtp_without_starttls_is_high",
+    "tests/test_cert_watch.py::TestDepth::test_target_parsing"
+   ],
+   "flags": [
+    "--starttls"
+   ]
+  },
+  {
+   "id": "details-on-failure",
+   "text": "Expiry, SAN, key and signature details are reported even when verification fails",
+   "tests": [
+    "tests/test_cert_watch.py::TestCertChecks::test_self_signed",
+    "tests/test_cert_watch.py::TestCertChecks::test_expired_cert_reports_verification_and_expiry",
+    "tests/test_cert_watch.py::TestCertChecks::test_hostname_mismatch"
+   ]
+  },
+  {
+   "id": "timeout",
+   "text": "`--timeout SECONDS` sets the\nper-connection timeout",
+   "tests": [
+    "tests/test_cert_watch.py::TestCertChecks::test_timeout_option_on_silent_server"
+   ],
+   "flags": [
+    "--timeout"
+   ]
+  },
+  {
+   "id": "targets",
+   "text": "Hosts can be `host`, `host:port`,\n`[ipv6]` or `[ipv6]:port`",
+   "tests": [
+    "tests/test_cert_watch.py::TestCli::test_ipv6_bracket_syntax",
+    "tests/test_cert_watch.py::TestDepth::test_target_parsing",
+    "tests/test_cert_watch.py::TestCli::test_multiple_hosts_file_and_text_report"
+   ],
+   "flags": [
+    "--file"
+   ]
+  },
+  {
+   "id": "json",
+   "text": "tls-cert-watchdog --json example.com",
+   "tests": [
+    "tests/test_cert_watch.py::TestCertChecks::test_healthy_host"
+   ],
+   "flags": [
+    "--json"
+   ]
+  },
+  {
+   "id": "exit-codes",
+   "text": "Exit codes (same convention as every Errant Solutions tool)",
+   "tests": [
+    "tests/test_cert_watch.py::TestCli::test_all_healthy_exit_zero",
+    "tests/test_cert_watch.py::TestCli::test_no_hosts_is_usage_error",
+    "tests/test_cert_watch.py::TestCli::test_bad_port_is_usage_error",
+    "tests/test_cert_watch.py::TestDepth::test_no_tls13_is_low"
+   ],
+   "flags": [
+    "--fail-on"
+   ]
+  },
+  {
+   "id": "stdlib-only",
+   "text": "stdlib-only Python 3.8+",
+   "tests": [
+    "tests/test_claims.py::TestClaims::test_stdlib_only"
+   ]
+  },
+  {
+   "id": "install-pipx",
+   "text": "pipx install git+https://git.canutethegreat.com/CanuteTheGreat/tls-cert-watchdog.git",
+   "tests": [
+    "ci/install-channels.sh#pipx install -q \"git+$FORGEJO/CanuteTheGreat/$REPO.git\"",
+    ".forgejo/workflows/nightly.yml#ci/install-channels.sh"
+   ]
+  },
+  {
+   "id": "install-homebrew",
+   "text": "brew install canutethegreat/errant-tools/tls-cert-watchdog",
+   "tests": [
+    "repo:homebrew-errant-tools/Formula/tls-cert-watchdog.rb#test do",
+    "repo:homebrew-errant-tools/.forgejo/workflows/test.yml#ci/run-tests.sh"
+   ]
+  },
+  {
+   "id": "install-scoop",
+   "text": "scoop install errant-tools/tls-cert-watchdog",
+   "tests": [
+    "repo:scoop-errant-tools/bucket/tls-cert-watchdog.json#\"bin\"",
+    "repo:scoop-errant-tools/.forgejo/workflows/test.yml#ci/run-tests.sh"
+   ]
+  },
+  {
+   "id": "install-download",
+   "text": "https://errant.solutions/downloads/cert_watch.py",
+   "tests": [
+    "ci/install-channels.sh#https://errant.solutions/downloads/$FILE"
+   ]
+  },
+  {
+   "id": "release-assets",
+   "text": "`SHA256SUMS` file",
+   "tests": [
+    "ci/install-channels.sh#sha256sum -c SHA256SUMS",
+    "ci/release.py#SHA256SUMS"
+   ]
+  },
+  {
+   "id": "python-versions",
+   "text": "Python 3.8+",
+   "tests": [
+    ".forgejo/workflows/test.yml#python: [\"3.8",
+    ".forgejo/workflows/nightly.yml#python: [\"3.8"
+   ]
+  }
+ ]
+}

@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.8", "3.13"]
+        python: ["3.8", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - name: Test suite (python ${{ matrix.python }}, capped container)

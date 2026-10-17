@@ -31,6 +31,7 @@ r = unittest.TextTestRunner(verbosity=2).run(suite)
 print("TEST SUMMARY: ran=%d failures=%d errors=%d skipped=%d" % (r.testsRun, len(r.failures), len(r.errors), len(r.skipped)))
 sys.exit(0 if r.wasSuccessful() and not r.skipped and r.testsRun > 0 else 1)
 EOF
+  python ci/check_claims.py   # claims ledger: every README claim names a test (claims.json)
   if python -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)"; then
     CMD=$(sed -n "/^\[project.scripts\]/{n;s/ =.*//p;}" pyproject.toml)
     VPATH=$(sed -n "/^\[tool.hatch.version\]/{n;s/^path = \"\(.*\)\"/\1/p;}" pyproject.toml)

@@ -2,6 +2,10 @@
 
 All notable changes. Versions are git tags; each tag has a Forgejo release with checksums.
 
+## Unreleased
+
+- Tests: accuracy suite against `openssl s_client` (9 certificate variants incl. a missing intermediate and a full chain; 6 server protocol ranges, every version compared), mutation testing (nightly), claims ledger. No detection differences were found.
+
 ## 1.2.0 - 2026-10-16
 
 - **Protocol enumeration**: TLS 1.0, 1.1, 1.2 and 1.3 are each tried separately, so a server that offers

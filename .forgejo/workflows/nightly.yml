@@ -1,0 +1,40 @@
+name: nightly
+
+# The slow test layers, nightly (and on demand), so per-push CI stays fast:
+#  * mutation: mutmut over the whole tool; fails below ci/mutation-min-score (only ever raised)
+#  * python-matrix: the full suite on every Python version from the README's minimum to the newest
+#  * install-channels: pipx from the Forgejo URL (main and the latest tag), the latest release's
+#    assets against SHA256SUMS, and the errant.solutions single-file download, as a user does
+on:
+  schedule:
+    - cron: "23 1 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  mutation:
+    runs-on: arm64
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - name: Mutation testing (mutmut, capped container)
+        run: sh ci/mutation.sh 3.13
+
+  python-matrix:
+    runs-on: arm64
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test suite (python ${{ matrix.python }}, capped container)
+        run: sh ci/run-tests.sh "${{ matrix.python }}"
+
+  install-channels:
+    runs-on: arm64
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install from every documented channel and run it
+        run: sh ci/install-channels.sh 3.13
