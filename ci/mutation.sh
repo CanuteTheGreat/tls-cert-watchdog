@@ -22,17 +22,37 @@ NAME="mut-${REPO}-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$"
 MIN=$(cat ci/mutation-min-score)
 # parallel mutant runs; a repo whose suite is memory-hungry (e.g. moto) pins fewer in ci/mutation-children
 CHILDREN=$(cat ci/mutation-children 2>/dev/null || echo 4)
+MEMORY=$(cat ci/mutation-memory 2>/dev/null || echo 3g)
+# a repo whose every mutant needs a slow end-to-end suite tests a fixed 1-in-N sample of its mutants
+# (chosen by a hash of the mutant name, so the same mutants every night and the score stays comparable)
+SAMPLE=$(cat ci/mutation-sample 2>/dev/null || echo 1)
 cleanup() { docker rm -f -v "$NAME" >/dev/null 2>&1 || true; }
 trap cleanup EXIT INT TERM
 # shellcheck disable=SC2086
-docker run -d --name "$NAME" --memory 3g --memory-swap 3g --cpus 4 --pids-limit 2048 \
+docker run -d --name "$NAME" --memory "$MEMORY" --memory-swap "$MEMORY" --cpus 4 --pids-limit 2048 \
   ${EXTRA_DOCKER_ARGS:-} "$IMAGE" sleep 7200 >/dev/null
 docker cp . "$NAME:/src"
-docker exec -w /src -e MIN="$MIN" -e REPORT="$REPORT" -e CHILDREN="$CHILDREN" "$NAME" sh -ec '
+docker exec -w /src -e MIN="$MIN" -e REPORT="$REPORT" -e CHILDREN="$CHILDREN" -e SAMPLE="$SAMPLE" "$NAME" sh -ec '
   if [ -x ci/setup.sh ]; then ci/setup.sh; fi
   pip install -q --disable-pip-version-check --root-user-action=ignore "mutmut==3.8.0" "pytest>=8" >/dev/null
   rm -rf mutants
-  mutmut run --max-children "$CHILDREN" > /tmp/mutmut.log 2>&1 || { tail -c 4000 /tmp/mutmut.log; exit 1; }
+  NAMES=""
+  if [ "$SAMPLE" -gt 1 ]; then
+    # generate the mutants (a filter that matches nothing stops mutmut right after that), then pick the sample
+    mutmut run "__generate_only__" > /tmp/mutmut-gen.log 2>&1 || true
+    NAMES=$(python - <<EOF
+import glob, json, os, zlib
+keys = sorted(k for p in glob.glob("mutants/**/*.meta", recursive=True)
+              for k in json.load(open(p)).get("exit_code_by_key", {}))
+pick = [k for k in keys if zlib.crc32(k.encode()) % int(os.environ["SAMPLE"]) == 0]
+print(" ".join(pick))
+EOF
+)
+    [ -n "$NAMES" ] || { echo "no mutants generated"; tail -c 4000 /tmp/mutmut-gen.log; exit 1; }
+    echo "MUTATION SAMPLE: 1 in $SAMPLE -> $(echo $NAMES | wc -w) mutants"
+  fi
+  # shellcheck disable=SC2086
+  mutmut run --max-children "$CHILDREN" $NAMES > /tmp/mutmut.log 2>&1 || { tail -c 4000 /tmp/mutmut.log; exit 1; }
   mutmut export-cicd-stats >/dev/null
   rc=0
   python - <<EOF || rc=1
