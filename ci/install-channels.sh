@@ -20,7 +20,9 @@ cleanup() { docker rm -f -v "$NAME" >/dev/null 2>&1 || true; }
 trap cleanup EXIT INT TERM
 docker run -d --name "$NAME" --memory 1g --memory-swap 1g --cpus 2 --pids-limit 512 \
   "python:$PY-bookworm" sleep 1800 >/dev/null
-docker exec -e REPO="$REPO" -e CMD="$CMD" -e VPATH="$VPATH" "$NAME" sh -ec '
+# extra packages the README says the single-file download needs (e.g. boto3), installed the way a user would
+DEPS=$(cat ci/download-deps 2>/dev/null || true)
+docker exec -e REPO="$REPO" -e CMD="$CMD" -e VPATH="$VPATH" -e DEPS="$DEPS" "$NAME" sh -ec '
   FORGEJO=https://git.canutethegreat.com
   API=$FORGEJO/api/v1/repos/CanuteTheGreat/$REPO
   fetch() { for i in 1 2 3 4 5; do curl -fsSL --retry 3 "$@" && return 0; sleep 5; done; return 1; }
@@ -57,8 +59,17 @@ for a in json.load(sys.stdin)[\"assets\"]: print(a[\"name\"], a[\"browser_downlo
   cd /tmp && fetch -o "dl-$FILE" "https://errant.solutions/downloads/$FILE"
   fetch -o "repo-$FILE" "$FORGEJO/CanuteTheGreat/$REPO/raw/branch/$MAIN/$VPATH"
   cmp "dl-$FILE" "repo-$FILE" || { echo "CHANNEL FAILED: errant.solutions/downloads/$FILE differs from $MAIN"; exit 1; }
-  OUT=$(python -I "dl-$FILE" --version); echo "direct download: $OUT"
+  DLPY=python
+  if [ -n "$DEPS" ]; then
+    # without them the tool must name what is missing (not a traceback), then work once installed
+    if python -I "dl-$FILE" --help > dl-nodeps.txt 2>&1; then echo "CHANNEL FAILED: --help ran without $DEPS"; exit 1; fi
+    if ! grep -q "$(echo "$DEPS" | head -1 | cut -d" " -f1)" dl-nodeps.txt || grep -q Traceback dl-nodeps.txt; then
+      echo "CHANNEL FAILED: no friendly message without $DEPS"; cat dl-nodeps.txt; exit 1; fi
+    echo "direct download without $(echo $DEPS): $(head -1 dl-nodeps.txt)"
+    python -m venv /tmp/dl && /tmp/dl/bin/pip install -q --disable-pip-version-check $DEPS && DLPY=/tmp/dl/bin/python
+  fi
+  OUT=$($DLPY -I "dl-$FILE" --version); echo "direct download: $OUT"
   [ "$OUT" = "$CMD $WANT" ] || { echo "CHANNEL FAILED: download printed \"$OUT\""; exit 1; }
-  python -I "dl-$FILE" --help >/dev/null
+  $DLPY -I "dl-$FILE" --help >/dev/null
   echo "INSTALL CHANNELS OK: pipx(main) pipx($TAG) release-assets direct-download"
 '
