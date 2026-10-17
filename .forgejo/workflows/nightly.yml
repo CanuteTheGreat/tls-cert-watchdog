@@ -12,7 +12,9 @@ on:
 
 jobs:
   mutation:
-    runs-on: arm64
+    # Heavy scheduled/on-demand work runs on its own low-priority lane (nightly-arm64, ctg-infrastructure
+    # ci-runners/rw-man-nightly) so it never holds the per-push runners for hours.
+    runs-on: nightly-arm64
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +22,7 @@ jobs:
         run: sh ci/mutation.sh 3.13
 
   python-matrix:
-    runs-on: arm64
+    runs-on: nightly-arm64
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -32,7 +34,7 @@ jobs:
         run: sh ci/run-tests.sh "${{ matrix.python }}"
 
   install-channels:
-    runs-on: arm64
+    runs-on: nightly-arm64
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
