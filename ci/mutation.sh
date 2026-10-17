@@ -20,17 +20,19 @@ IMAGE="python:$PY-bookworm"
 REPO="$(basename "$(pwd)")"
 NAME="mut-${REPO}-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-$$"
 MIN=$(cat ci/mutation-min-score)
+# parallel mutant runs; a repo whose suite is memory-hungry (e.g. moto) pins fewer in ci/mutation-children
+CHILDREN=$(cat ci/mutation-children 2>/dev/null || echo 4)
 cleanup() { docker rm -f -v "$NAME" >/dev/null 2>&1 || true; }
 trap cleanup EXIT INT TERM
 # shellcheck disable=SC2086
 docker run -d --name "$NAME" --memory 3g --memory-swap 3g --cpus 4 --pids-limit 2048 \
   ${EXTRA_DOCKER_ARGS:-} "$IMAGE" sleep 7200 >/dev/null
 docker cp . "$NAME:/src"
-docker exec -w /src -e MIN="$MIN" -e REPORT="$REPORT" "$NAME" sh -ec '
+docker exec -w /src -e MIN="$MIN" -e REPORT="$REPORT" -e CHILDREN="$CHILDREN" "$NAME" sh -ec '
   if [ -x ci/setup.sh ]; then ci/setup.sh; fi
   pip install -q --disable-pip-version-check --root-user-action=ignore "mutmut==3.8.0" "pytest>=8" >/dev/null
   rm -rf mutants
-  mutmut run --max-children 4 > /tmp/mutmut.log 2>&1 || { tail -c 4000 /tmp/mutmut.log; exit 1; }
+  mutmut run --max-children "$CHILDREN" > /tmp/mutmut.log 2>&1 || { tail -c 4000 /tmp/mutmut.log; exit 1; }
   mutmut export-cicd-stats >/dev/null
   rc=0
   python - <<EOF || rc=1

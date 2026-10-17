@@ -21,6 +21,7 @@ import os
 import socket
 import subprocess
 import sys
+import threading
 import time
 import traceback
 import urllib.request
@@ -72,7 +73,9 @@ def _inprocess_run(args, *pargs, **kw):
         # SSL_CERT_FILE, when the opener is first built)
         urllib.request.install_opener(None)
         # retry back-off sleeps (e.g. crt.sh's 2/4/6 s) only make mutants slow; nothing asserts on them
-        time.sleep = lambda secs: _REAL_SLEEP(min(secs, 0.01))
+        # (only on the test's own thread: fixture servers running in other threads, e.g. a deliberately
+        # slow endpoint for a --timeout test, must keep their real delays)
+        time.sleep = lambda secs: _REAL_SLEEP(min(secs, 0.01) if threading.current_thread() is threading.main_thread() else secs)
         sys.argv = [args[1]] + [str(a) for a in args[2:]]
         sys.stdin, sys.stdout, sys.stderr = stdin, stdout, stderr
         mod = sys.modules.get(name)

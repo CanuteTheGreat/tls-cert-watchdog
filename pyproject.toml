@@ -46,5 +46,5 @@ only-include = ["cert_watch.py", "README.md", "LICENSE", "CHANGELOG.md", "tests"
 # ci/mutation.sh (nightly workflow)
 source_paths = ["cert_watch.py"]
 pytest_add_cli_args_test_selection = ["tests/"]
-also_copy = ["claims.json", "ci/check_claims.py", "README.md", "CHANGELOG.md"]
+also_copy = ["claims.json", "ci", "README.md", "CHANGELOG.md"]
 
