@@ -9,7 +9,9 @@ on:
 
 jobs:
   release:
-    runs-on: linux-cross-x86_64
+    # colo-only lane (rw-man-01, ctg-infrastructure ci-runners/rw-man-colo): security-tool CI never
+    # runs on the EC2 hosts rw-man-02..05 (GuardDuty). Light slots, so pushes don't queue behind mutation.
+    runs-on: colo-light-x86_64
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
