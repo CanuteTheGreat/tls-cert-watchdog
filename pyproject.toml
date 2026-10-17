@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tls-cert-watchdog"
+dynamic = ["version"]
+description = "Check TLS certificate expiry, chain, key size and offered protocol versions, including STARTTLS services"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.8"
+authors = [{ name = "Errant Solutions", email = "hello@errant.solutions" }]
+keywords = ["tls", "ssl", "certificate", "expiry", "starttls", "monitoring"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+    "Topic :: System :: Systems Administration",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://errant.solutions/tools/tls-cert-watchdog.html"
+Source = "https://git.canutethegreat.com/CanuteTheGreat/tls-cert-watchdog"
+Changelog = "https://git.canutethegreat.com/CanuteTheGreat/tls-cert-watchdog/src/branch/main/CHANGELOG.md"
+Releases = "https://git.canutethegreat.com/CanuteTheGreat/tls-cert-watchdog/releases"
+
+[project.scripts]
+tls-cert-watchdog = "cert_watch:main"
+
+[tool.hatch.version]
+path = "cert_watch.py"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["cert_watch.py"]
+
+[tool.hatch.build.targets.sdist]
+only-include = ["cert_watch.py", "README.md", "LICENSE", "CHANGELOG.md", "tests"]

@@ -1,0 +1,20 @@
+name: release
+
+# On a vX.Y.Z tag: build + verify the sdist/wheel, publish a Forgejo release with the
+# CHANGELOG section as notes and SHA256SUMS, and (only if the PYPI_API_TOKEN secret is
+# set) upload to PyPI. Plain shell + the Forgejo API; no GitHub-only actions.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release:
+    runs-on: linux-cross-x86_64
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build, verify and publish the release
+        env:
+          FORGEJO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: python3 ci/release.py

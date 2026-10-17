@@ -14,6 +14,7 @@ import os
 import shutil
 import socket
 import ssl
+import struct
 import subprocess
 import sys
 import tempfile
@@ -22,7 +23,7 @@ import unittest
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.x509.oid import NameOID
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -59,17 +60,37 @@ class PKI:
         with open(self.ca_file, "wb") as f:
             f.write(self.ca_cert.public_bytes(serialization.Encoding.PEM))
 
-    def leaf(self, name, days_valid=90, not_before_days=-1, sans=("localhost",), self_signed=False,
-             algorithm=None):
+    def intermediate(self, days_valid):
+        """An intermediate CA (signed by the root) that leaves can be issued from."""
         key = _key()
+        cert = (x509.CertificateBuilder().subject_name(_name("cert-watch test intermediate"))
+                .issuer_name(self.ca_cert.subject).public_key(key.public_key())
+                .serial_number(x509.random_serial_number())
+                .not_valid_before(NOW - datetime.timedelta(days=1))
+                .not_valid_after(NOW + datetime.timedelta(days=days_valid, hours=1))
+                .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+                .add_extension(x509.KeyUsage(digital_signature=True, content_commitment=False, key_encipherment=False,
+                                             data_encipherment=False, key_agreement=False, key_cert_sign=True,
+                                             crl_sign=True, encipher_only=False, decipher_only=False), critical=True)
+                .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
+                .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(self.ca_key.public_key()),
+                               critical=False)
+                .sign(self.ca_key, hashes.SHA256()))
+        return key, cert
+
+    def leaf(self, name, days_valid=90, not_before_days=-1, sans=("localhost",), self_signed=False,
+             algorithm=None, key=None, issuer_pair=None):
+        key = key or _key()
         issuer_key, issuer = (key, _name("localhost")) if self_signed else (self.ca_key, self.ca_cert.subject)
+        if issuer_pair:
+            issuer_key, issuer = issuer_pair[0], issuer_pair[1].subject
         b = (x509.CertificateBuilder().subject_name(_name("localhost")).issuer_name(issuer)
              .public_key(key.public_key()).serial_number(x509.random_serial_number())
              .not_valid_before(NOW + datetime.timedelta(days=not_before_days))
              .not_valid_after(NOW + datetime.timedelta(days=days_valid, hours=1)))
         b = b.add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
         if not self_signed:
-            b = b.add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(self.ca_key.public_key()),
+            b = b.add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(issuer_key.public_key()),
                                 critical=False)
         b = b.add_extension(x509.ExtendedKeyUsage([x509.oid.ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
         if sans:
@@ -79,8 +100,10 @@ class PKI:
         key_path = os.path.join(self.tmp, name + ".key")
         with open(cert_path, "wb") as f:
             f.write(cert.public_bytes(serialization.Encoding.PEM))
+            if issuer_pair:  # serve the full chain: leaf + intermediate
+                f.write(issuer_pair[1].public_bytes(serialization.Encoding.PEM))
         with open(key_path, "wb") as f:
-            f.write(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.TraditionalOpenSSL,
+            f.write(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
                                       serialization.NoEncryption()))
         return cert_path, key_path
 
@@ -109,10 +132,42 @@ def _leaf_sha1_via_openssl(self, name):
 PKI.leaf_sha1_via_openssl = _leaf_sha1_via_openssl
 
 
+def starttls_prelude(conn, proto):
+    """Server side of each STARTTLS dialect; returns False to refuse ('smtp-nostarttls')."""
+    f = conn.makefile("rb")
+    if proto in ("smtp", "smtp-nostarttls"):
+        conn.sendall(b"220-mail.test ESMTP\r\n220 ready\r\n")
+        f.readline()  # EHLO
+        caps = [b"mail.test", b"PIPELINING", b"SIZE 10240000"] + ([b"STARTTLS"] if proto == "smtp" else [])
+        conn.sendall(b"".join(b"250-" + c + b"\r\n" for c in caps[:-1]) + b"250 " + caps[-1] + b"\r\n")
+        if proto != "smtp":
+            f.readline()
+            return False
+        assert f.readline().strip().upper() == b"STARTTLS"
+        conn.sendall(b"220 2.0.0 Ready to start TLS\r\n")
+    elif proto == "imap":
+        conn.sendall(b"* OK [CAPABILITY IMAP4rev1 STARTTLS] ready\r\n")
+        tag = f.readline().split(b" ", 1)[0]
+        conn.sendall(b"* some untagged noise\r\n" + tag + b" OK Begin TLS negotiation now\r\n")
+    elif proto == "pop3":
+        conn.sendall(b"+OK POP3 ready\r\n")
+        assert f.readline().strip().upper() == b"STLS"
+        conn.sendall(b"+OK Begin TLS\r\n")
+    elif proto == "ftp":
+        conn.sendall(b"220 FTP ready\r\n")
+        assert f.readline().strip().upper() == b"AUTH TLS"
+        conn.sendall(b"234 AUTH TLS OK\r\n")
+    elif proto == "postgres":
+        assert conn.recv(8) == struct.pack("!ii", 8, 80877103)
+        conn.sendall(b"S")
+    return True
+
+
 class TLSServer:
     """A real TLS listener on 127.0.0.1:<random port> in a background thread."""
 
-    def __init__(self, cert, key, min_version=None, max_version=None, ciphers=None):
+    def __init__(self, cert, key, min_version=None, max_version=None, ciphers=None, starttls=None):
+        self.starttls = starttls
         self.ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         if ciphers or min_version:
             self.ctx.set_ciphers(ciphers or "ALL:@SECLEVEL=0")
@@ -140,6 +195,9 @@ class TLSServer:
                 return
             try:
                 conn.settimeout(5)
+                if self.starttls and not starttls_prelude(conn, self.starttls):
+                    conn.close()
+                    continue
                 with self.ctx.wrap_socket(conn, server_side=True) as s:
                     s.recv(1)
             except (ssl.SSLError, OSError):
@@ -164,7 +222,9 @@ class Base(unittest.TestCase):
 
     def serve(self, *leaf_args, server_kwargs=None, **leaf_kwargs):
         cert, key = self.pki.leaf(*leaf_args, **leaf_kwargs)
-        srv = TLSServer(cert, key, **(server_kwargs or {}))
+        kw = dict(server_kwargs or {})
+        kw.setdefault("min_version", ssl.TLSVersion.TLSv1_2)  # a modern server unless the test says otherwise
+        srv = TLSServer(cert, key, **kw)
         self.servers.append(srv)
         return srv.port
 
@@ -191,6 +251,10 @@ class TestCertChecks(Base):
         self.assertIn(r["days_left"], (199, 200))
         self.assertEqual(r["san"], ["localhost"])
         self.assertIn(r["protocol"], ("TLSv1.2", "TLSv1.3"))
+        self.assertEqual(r["key"], {"type": "RSA", "bits": 2048, "curve": None})
+        self.assertEqual(r["protocols"]["TLSv1.2"], True)
+        self.assertEqual(r["protocols"]["TLSv1.3"], True)
+        self.assertEqual(r["protocols"]["TLSv1"], False)
 
     def test_expiring_inside_warn_window_is_high(self):
         code, r, msgs = self.check(self.serve("soon", days_valid=10))
@@ -332,6 +396,88 @@ class TestCli(Base):
         p = self.run_tool("localhost:notaport")
         self.assertEqual(p.returncode, 2)
         self.assertNotIn("Traceback", p.stderr)
+
+
+class TestDepth(Base):
+    def test_server_accepting_legacy_alongside_tls13_is_high(self):
+        # the gap this closes: a server offering TLS 1.3 *and* TLS 1.0 used to pass
+        port = self.serve("mixed", server_kwargs={"min_version": ssl.TLSVersion.TLSv1})
+        code, r, msgs = self.check(port)
+        self.assertEqual(r["protocol"], "TLSv1.3")
+        self.assertEqual(r["protocols"], {"TLSv1": True, "TLSv1.1": True, "TLSv1.2": True, "TLSv1.3": True})
+        self.assertEqual(code, 1)
+        self.assertIn("HIGH Server still accepts legacy TLSv1 and TLSv1.1", msgs)
+        code, r, msgs = self.check(port, "--no-protocol-scan")
+        self.assertEqual(code, 0, msgs)
+        self.assertNotIn("protocols", r)
+
+    def test_no_tls13_is_low(self):
+        port = self.serve("no13", server_kwargs={"max_version": ssl.TLSVersion.TLSv1_2})
+        code, r, msgs = self.check(port)
+        self.assertEqual(code, 0, msgs)
+        self.assertIn("LOW TLS 1.3 is not offered.", msgs)
+        self.assertEqual(self.check(port, "--fail-on", "low")[0], 1)
+
+    def test_key_types_and_sizes(self):
+        code, r, msgs = self.check(self.serve("rsa1024", key=rsa.generate_private_key(65537, 1024),
+                                              server_kwargs={"ciphers": "ALL:@SECLEVEL=0"}))
+        self.assertEqual(r["key"]["bits"], 1024)
+        self.assertIn("HIGH RSA key is only 1024 bits", msgs)
+        code, r, msgs = self.check(self.serve("ec", key=ec.generate_private_key(ec.SECP384R1())))
+        self.assertEqual(code, 0, msgs)
+        self.assertEqual(r["key"], {"type": "EC", "bits": 384, "curve": "P-384"})
+
+    def test_chain_and_expiring_intermediate(self):
+        inter = self.pki.intermediate(days_valid=5)
+        code, r, msgs = self.check(self.serve("chained", days_valid=200, issuer_pair=inter))
+        if sys.version_info < (3, 13):  # the stdlib only exposes the served chain from 3.13 on
+            self.assertNotIn("chain", r)
+            return
+        self.assertEqual([c["subject"] for c in r["chain"]],
+                         ["commonName=localhost", "commonName=cert-watch test intermediate"])
+        self.assertEqual(code, 1)
+        self.assertIn("HIGH Chain certificate 'commonName=cert-watch test intermediate' expires in", msgs)
+
+    def test_starttls_protocols(self):
+        for proto in ("smtp", "imap", "pop3", "ftp", "postgres"):
+            with self.subTest(proto=proto):
+                port = self.serve("st-" + proto, days_valid=200,
+                                  server_kwargs={"starttls": proto, "min_version": ssl.TLSVersion.TLSv1})
+                code, r, msgs = self.check(port, "--starttls", proto)
+                self.assertEqual(r["starttls"], proto)
+                self.assertIn(r["protocol"], ("TLSv1.2", "TLSv1.3"))
+                self.assertIn(r["days_left"], (199, 200))
+                self.assertEqual(r["protocols"]["TLSv1"], True)
+                # legacy TLS on an opportunistic STARTTLS service is MEDIUM, not HIGH
+                self.assertIn("MEDIUM Server still accepts legacy", msgs)
+                self.assertEqual(code, 0, msgs)
+                p = self.run_tool("--json", "%s://localhost:%d" % (proto, port))
+                self.assertEqual(json.loads(p.stdout)[0]["starttls"], proto)
+
+    def test_smtp_without_starttls_is_high(self):
+        port = self.serve("nost", server_kwargs={"starttls": "smtp-nostarttls"})
+        code, r, msgs = self.check(port, "--starttls", "smtp")
+        self.assertEqual(code, 1)
+        self.assertIn("HIGH STARTTLS (smtp) failed: SMTP server does not offer STARTTLS", msgs)
+
+    def test_target_parsing(self):
+        sys.path.insert(0, os.path.dirname(TOOL))
+        import cert_watch
+        self.assertEqual(cert_watch.parse_target("mail.example.com:25"), ("mail.example.com", 25, "smtp"))
+        self.assertEqual(cert_watch.parse_target("smtp://mail.example.com"), ("mail.example.com", 25, "smtp"))
+        self.assertEqual(cert_watch.parse_target("submission://m.example.com"), ("m.example.com", 587, "smtp"))
+        self.assertEqual(cert_watch.parse_target("imap://m.example.com:1143"), ("m.example.com", 1143, "imap"))
+        self.assertEqual(cert_watch.parse_target("db.example.com:5432"), ("db.example.com", 5432, "postgres"))
+        self.assertEqual(cert_watch.parse_target("example.com"), ("example.com", 443, ""))
+        self.assertEqual(cert_watch.parse_target("example.com:25", "none"), ("example.com", 25, ""))
+        with self.assertRaises(ValueError):
+            cert_watch.parse_target("gopher://example.com")
+        p = self.run_tool("gopher://example.com")
+        self.assertEqual(p.returncode, 2)
+
+    def test_version(self):
+        p = self.run_tool("--version")
+        self.assertRegex(p.stdout, r"^tls-cert-watchdog \d+\.\d+\.\d+$")
 
 
 if __name__ == "__main__":

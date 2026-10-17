@@ -4,6 +4,10 @@
 # works on any host with docker). Fails if any test errors, fails OR is
 # skipped -- a skipped test is an untested feature.
 #
+# On Python >= 3.8 it then checks the package the way a user installs it:
+# `pip install .` into a fresh venv (what `pipx install` does), and the installed
+# command must print this repo's __version__ for --version and exit 0 for --help.
+#
 #   ci/run-tests.sh 3.13
 #   EXTRA_DOCKER_ARGS="-v /var/run/docker.sock:/var/run/docker.sock" ci/run-tests.sh 3.13
 set -eu
@@ -27,4 +31,16 @@ r = unittest.TextTestRunner(verbosity=2).run(suite)
 print("TEST SUMMARY: ran=%d failures=%d errors=%d skipped=%d" % (r.testsRun, len(r.failures), len(r.errors), len(r.skipped)))
 sys.exit(0 if r.wasSuccessful() and not r.skipped and r.testsRun > 0 else 1)
 EOF
+  if python -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)"; then
+    CMD=$(sed -n "/^\[project.scripts\]/{n;s/ =.*//p;}" pyproject.toml)
+    VPATH=$(sed -n "/^\[tool.hatch.version\]/{n;s/^path = \"\(.*\)\"/\1/p;}" pyproject.toml)
+    VER=$(sed -n "s/^__version__ = \"\(.*\)\"/\1/p" "$VPATH")
+    python -m venv /tmp/pkg
+    /tmp/pkg/bin/pip install -q --disable-pip-version-check /src
+    OUT=$(/tmp/pkg/bin/$CMD --version)
+    echo "installed: $OUT"
+    case "$OUT" in *" $VER") ;; *) echo "PACKAGE CHECK FAILED: --version printed \"$OUT\", expected $VER"; exit 1;; esac
+    /tmp/pkg/bin/$CMD --help >/dev/null
+    echo "PACKAGE CHECK: pip install . -> $CMD $VER (--version, --help) OK"
+  fi
 '
