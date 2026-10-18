@@ -23,7 +23,10 @@ set -eu
 # Mutation testing runs only on the colo host (rw-man-01, `runs-on: colo-x86_64`): rw-man-02..05
 # are EC2 instances under GuardDuty, which flags mutated code as malware (2026-10-17). Refuse on
 # EC2 whether called from CI or by hand (DMI is visible inside containers too).
-if [ "$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null)" = "Amazon EC2" ]; then
+# Opt-in since 2026-10-18 (owner: the colo backlog was too big; GuardDuty suppression kept, all
+# rw-man-01..05 may run mutation/chaos again): refuses only when CI_COLO_ONLY=1 is set, so setting
+# that one variable (workflow env or runner envs:) re-enables the colo-only rule.
+if [ "${CI_COLO_ONLY:-0}" = 1 ] && [ "$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null)" = "Amazon EC2" ]; then
   echo "mutation testing refused: this is an EC2 host; run it on the colo lane (rw-man-01)" >&2
   exit 1
 fi
@@ -39,7 +42,7 @@ MUT_ID="${MUT_ID:-$REPO}"
 DIFF=""
 [ "$MODE" = incremental ] && DIFF=".mutation-baseline/$MUT_ID/diff.patch"
 # parallel mutant runs; a repo whose suite is memory-hungry (e.g. moto) pins fewer in ci/mutation-children
-CHILDREN=$(cat ci/mutation-children 2>/dev/null || echo 4)
+CHILDREN=$(cat ci/mutation-children 2>/dev/null || echo 3)
 MEMORY=$(cat ci/mutation-memory 2>/dev/null || echo 3g)
 # a repo whose every mutant needs a slow end-to-end suite tests a fixed 1-in-N sample of its mutants
 # (chosen by a hash of the mutant name, so the same mutants every night and the score stays comparable)
@@ -48,9 +51,9 @@ cleanup() { docker rm -f -v "$NAME" >/dev/null 2>&1 || true; }
 trap cleanup EXIT INT TERM
 # the container must outlive the job's timeout-minutes (the trap removes it): a 2 h lifetime
 # killed slow runs on the shared colo lane with exit 137 (aws-waste-finder, 2026-10-18)
-# --cpus matches CHILDREN (one pytest per child); the colo slot itself is --cpus=4.
+# --cpus matches CHILDREN (one pytest per child) and the shared lane's 3-CPU EC2 slots (rw-man-02..05).
 # shellcheck disable=SC2086
-docker run -d --name "$NAME" --memory "$MEMORY" --memory-swap "$MEMORY" --cpus 4 --pids-limit 2048 \
+docker run -d --name "$NAME" --memory "$MEMORY" --memory-swap "$MEMORY" --cpus 3 --pids-limit 2048 \
   ${EXTRA_DOCKER_ARGS:-} "$IMAGE" sleep 14400 >/dev/null
 docker cp . "$NAME:/src"
 rc=0
