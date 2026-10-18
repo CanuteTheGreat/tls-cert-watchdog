@@ -22,9 +22,11 @@ jobs:
         run: sh ci/mutation.sh 3.13
 
   python-matrix:
+    # colo-light: a short test run in ci/run-tests.sh's own 1g container, like test.yml; colo-x86_64's
+    # two slots are for mutation, where these 1-minute jobs used to queue for hours.
     # colo-only lane (rw-man-01, ctg-infrastructure ci-runners/rw-man-colo): mutation / chaos /
     # security-tool / network-probing CI never runs on the EC2 hosts rw-man-02..05 (GuardDuty).
-    runs-on: colo-x86_64
+    runs-on: colo-light-x86_64
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -38,7 +40,7 @@ jobs:
   install-channels:
     # colo-only lane (rw-man-01, ctg-infrastructure ci-runners/rw-man-colo): mutation / chaos /
     # security-tool / network-probing CI never runs on the EC2 hosts rw-man-02..05 (GuardDuty).
-    runs-on: colo-x86_64
+    runs-on: colo-light-x86_64
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
