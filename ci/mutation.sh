@@ -14,6 +14,13 @@
 # calls run the mutated tool in-process while mutmut drives pytest, so mutmut can
 # see which test exercises which function (unittest ignores conftest.py).
 set -eu
+# Mutation testing runs only on the colo host (rw-man-01, `runs-on: colo-x86_64`): rw-man-02..05
+# are EC2 instances under GuardDuty, which flags mutated code as malware (2026-10-17). Refuse on
+# EC2 whether called from CI or by hand (DMI is visible inside containers too).
+if [ "$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null)" = "Amazon EC2" ]; then
+  echo "mutation testing refused: this is an EC2 host; run it on the colo lane (rw-man-01)" >&2
+  exit 1
+fi
 PY="${1:-3.13}"
 REPORT="${2:-}"
 IMAGE="python:$PY-bookworm"
