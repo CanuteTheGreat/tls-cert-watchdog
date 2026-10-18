@@ -1,14 +1,28 @@
 name: nightly
 
 # The slow test layers, nightly (and on demand), so per-push CI stays fast:
-#  * mutation: mutmut over the whole tool; fails below ci/mutation-min-score (only ever raised)
+#  * mutation: mutmut over the whole tool every Wednesday (fails below ci/mutation-min-score, only ever
+#    raised); the other nights only the functions changed since the last green run (fails on any new
+#    surviving mutant there)
 #  * python-matrix: the full suite on every Python version from the README's minimum to the newest
 #  * install-channels: pipx from the Forgejo URL (main and the latest tag), the latest release's
 #    assets against SHA256SUMS, and the errant.solutions single-file download, as a user does
 on:
   schedule:
-    - cron: "23 1 * * *"
-  workflow_dispatch: {}
+    # staggered across the colo lane's day (ctg-infrastructure ci-runners/rw-man-colo/README.md)
+    - cron: "10 9 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'mutation: auto (full on Wednesdays, else changed code only), full or incremental'
+        required: false
+        default: 'auto'
+
+# A newer queued run replaces an older one that has not started (ci-supersede-sweeper,
+# replace: groups); a started run is never cancelled.
+concurrency:
+  group: "replace:${{ github.workflow }}@${{ github.ref }}"
+  cancel-in-progress: false
 
 jobs:
   mutation:
@@ -18,7 +32,22 @@ jobs:
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
+        with:
+          # the incremental diff starts at the last green run's commit
+          fetch-depth: 0
+      - name: Mutation baseline (last green run)
+        uses: actions/cache@v4
+        with:
+          path: .mutation-baseline
+          # saved only when the job succeeds; restore-keys picks the newest green baseline
+          key: mutation-baseline-tls-cert-watchdog-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: mutation-baseline-tls-cert-watchdog-
+      - name: Full or incremental?
+        # full every Wednesday (UTC) and on demand; other nights only the functions changed since the
+        # last green run (ctg-infrastructure ci-runners/mutation-incremental)
+        run: python3 ci/mutation-incremental.py plan --id tls-cert-watchdog --kind mutmut --full-dow 3 --mode "${{ github.event.inputs.mode }}" -- cert_watch.py tests pyproject.toml ci/setup.sh
       - name: Mutation testing (mutmut, capped container)
+        if: env.MUT_MODE != 'skip'
         run: sh ci/mutation.sh 3.13
 
   python-matrix:
