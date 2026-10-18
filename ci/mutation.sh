@@ -35,9 +35,11 @@ MEMORY=$(cat ci/mutation-memory 2>/dev/null || echo 3g)
 SAMPLE=$(cat ci/mutation-sample 2>/dev/null || echo 1)
 cleanup() { docker rm -f -v "$NAME" >/dev/null 2>&1 || true; }
 trap cleanup EXIT INT TERM
+# the container must outlive the job's timeout-minutes (the trap removes it): a 2 h lifetime
+# killed slow runs on the shared colo lane with exit 137 (aws-waste-finder, 2026-10-18)
 # shellcheck disable=SC2086
 docker run -d --name "$NAME" --memory "$MEMORY" --memory-swap "$MEMORY" --cpus 4 --pids-limit 2048 \
-  ${EXTRA_DOCKER_ARGS:-} "$IMAGE" sleep 7200 >/dev/null
+  ${EXTRA_DOCKER_ARGS:-} "$IMAGE" sleep 14400 >/dev/null
 docker cp . "$NAME:/src"
 docker exec -w /src -e MIN="$MIN" -e REPORT="$REPORT" -e CHILDREN="$CHILDREN" -e SAMPLE="$SAMPLE" "$NAME" sh -ec '
   if [ -x ci/setup.sh ]; then ci/setup.sh; fi
