@@ -44,6 +44,20 @@ DIFF=""
 # parallel mutant runs; a repo whose suite is memory-hungry (e.g. moto) pins fewer in ci/mutation-children
 CHILDREN=$(cat ci/mutation-children 2>/dev/null || echo 3)
 MEMORY=$(cat ci/mutation-memory 2>/dev/null || echo 3g)
+# Per-process data cap inside the container: an even share of it per mutmut process (CHILDREN
+# mutant runs + the fork server that forks them). A mutant that turns a loop into an endless
+# allocation grew one child to 4.8 GB in nginx-config-auditor's 5g container (2026-10-20, rw-man-03
+# kernel log 07:30-07:33 UTC); the cgroup OOM killer then took mutmut itself and the full run died
+# at mutant 1662/2119. With the cap that child gets MemoryError, its tests fail and the mutant
+# counts as caught (like a timeout); the rest of the run is unaffected. The clean test run (the
+# whole suite in one process) runs under the same cap first, so a suite that genuinely needs more
+# fails loudly at the start instead of turning ordinary mutants into fake kills.
+case "$MEMORY" in
+  *[gG]) MEM_KB=$(( ${MEMORY%?} * 1024 * 1024 )) ;;
+  *[mM]) MEM_KB=$(( ${MEMORY%?} * 1024 )) ;;
+  *) MEM_KB=$(( MEMORY / 1024 )) ;;
+esac
+DATA_KB=$(( MEM_KB / (CHILDREN + 1) ))
 # a repo whose every mutant needs a slow end-to-end suite tests a fixed 1-in-N sample of its mutants
 # (chosen by a hash of the mutant name, so the same mutants every night and the score stays comparable)
 SAMPLE=$(cat ci/mutation-sample 2>/dev/null || echo 1)
@@ -57,7 +71,7 @@ docker run -d --name "$NAME" --memory "$MEMORY" --memory-swap "$MEMORY" --cpus 3
   ${EXTRA_DOCKER_ARGS:-} "$IMAGE" sleep 14400 >/dev/null
 docker cp . "$NAME:/src"
 rc=0
-docker exec -w /src -e MIN="$MIN" -e REPORT="$REPORT" -e CHILDREN="$CHILDREN" -e SAMPLE="$SAMPLE" \
+docker exec -w /src -e MIN="$MIN" -e REPORT="$REPORT" -e CHILDREN="$CHILDREN" -e SAMPLE="$SAMPLE" -e DATA_KB="$DATA_KB" \
   -e MODE="$MODE" -e DIFF="$DIFF" -e MUT_ID="$MUT_ID" "$NAME" sh -ec '
   # the checkout belongs to the runner uid; mutmut and the gate read git history
   git config --global --add safe.directory "*"
@@ -91,6 +105,8 @@ EOF
     echo "MUTATION SAMPLE: 1 in $SAMPLE -> $(echo $NAMES | wc -w) mutants"
   fi
   # shellcheck disable=SC2086
+  ulimit -d "$DATA_KB"
+  echo "MUTATION: per-process data cap $((DATA_KB / 1024)) MiB ($CHILDREN children)"
   mutmut run --max-children "$CHILDREN" $NAMES > /tmp/mutmut.log 2>&1 || { tail -c 4000 /tmp/mutmut.log; exit 1; }
   mutmut export-cicd-stats >/dev/null
   rc=0
