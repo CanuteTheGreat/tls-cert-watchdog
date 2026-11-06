@@ -76,7 +76,7 @@ docker exec -w /src -e MIN="$MIN" -e REPORT="$REPORT" -e CHILDREN="$CHILDREN" -e
   # the checkout belongs to the runner uid; mutmut and the gate read git history
   git config --global --add safe.directory "*"
   if [ -x ci/setup.sh ]; then ci/setup.sh; fi
-  pip install -q --disable-pip-version-check --root-user-action=ignore "mutmut==3.8.0" "pytest>=8" >/dev/null
+  pip install -q --disable-pip-version-check --root-user-action=ignore "mutmut==3.8.0" "pytest>=8,<9" >/dev/null
   rm -rf mutants
   NAMES=""
   if [ "$MODE" = incremental ] || [ "$SAMPLE" -gt 1 ]; then
