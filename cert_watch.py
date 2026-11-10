@@ -28,10 +28,11 @@ errors -- CI/cron friendly.
 
 Copyright (c) 2026 Errant Solutions. MIT licensed.
 """
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import socket
@@ -39,6 +40,7 @@ import ssl
 import struct
 import sys
 import tempfile
+import urllib.request
 import warnings
 
 # Signature algorithms that should no longer appear on a served certificate.
@@ -147,6 +149,147 @@ def decode_der_cert(der: bytes) -> dict:
         return {}
     finally:
         os.unlink(path)
+
+
+OID_AIA = "1.3.6.1.5.5.7.1.1"
+OID_OCSP = "1.3.6.1.5.5.7.48.1"
+OID_TLS_FEATURE = "1.3.6.1.5.5.7.1.24"
+OCSP_STATUS = {0: "successful", 1: "malformedRequest", 2: "internalError", 3: "tryLater",
+               5: "sigRequired", 6: "unauthorized"}
+
+
+def _children(der: bytes, start: int, end: int):
+    """TLVs directly inside [start, end) -> [(tag, content_start, content_end, tlv_start)]."""
+    out, i = [], start
+    while i < end:
+        tag, cs, ce = _der_read(der, i)
+        out.append((tag, cs, ce, i))
+        i = ce
+    return out
+
+
+def _tbs_fields(der: bytes):
+    """Child TLVs of tbsCertificate: [(tag, content_start, content_end, tlv_start)]."""
+    _, start, _ = _der_read(der, 0)
+    _, i, tbs_end = _der_read(der, start)
+    return _children(der, i, tbs_end)
+
+
+def cert_extensions(der: bytes) -> dict:
+    """{oid: value bytes (the extnValue OCTET STRING content)} of a DER certificate; {} on bad input."""
+    try:
+        for tag, cs, ce, _ in _tbs_fields(der):
+            if tag == 0xA3:                                   # [3] extensions
+                _, es, ee = _der_read(der, cs)
+                found = {}
+                for _, xs, xe, _ in _children(der, es, ee):    # each Extension
+                    parts = _children(der, xs, xe)
+                    oid = _oid_to_str(der[parts[0][1]:parts[0][2]])
+                    val = parts[-1]                            # extnValue (after the optional critical flag)
+                    found[oid] = der[val[1]:val[2]]
+                return found
+    except (IndexError, ValueError):
+        pass
+    return {}
+
+
+def ocsp_info(der: bytes):
+    """(OCSP responder URLs from Authority Information Access, must-staple flag) of a certificate."""
+    ext = cert_extensions(der)
+    urls = []
+    aia = ext.get(OID_AIA)
+    if aia:
+        try:
+            _, s0, e0 = _der_read(aia, 0)
+            for _, xs, xe, _ in _children(aia, s0, e0):        # AccessDescription
+                parts = _children(aia, xs, xe)
+                if _oid_to_str(aia[parts[0][1]:parts[0][2]]) == OID_OCSP and parts[1][0] == 0x86:
+                    urls.append(aia[parts[1][1]:parts[1][2]].decode("ascii", "replace"))
+        except (IndexError, ValueError):
+            pass
+    must_staple = False
+    feat = ext.get(OID_TLS_FEATURE)                           # SEQUENCE OF INTEGER; 5 = status_request
+    if feat:
+        try:
+            _, s0, e0 = _der_read(feat, 0)
+            must_staple = any(feat[a:b] == b"\x05" for t, a, b, _ in _children(feat, s0, e0) if t == 0x02)
+        except (IndexError, ValueError):
+            pass
+    return urls, must_staple
+
+
+def ocsp_cert_id(der: bytes, issuer_der: bytes) -> bytes:
+    """DER CertID (RFC 6960 s4.1.1, SHA-1) for a certificate and the certificate that issued it."""
+    f = _tbs_fields(der)
+    i = 1 if f[0][0] == 0xA0 else 0
+    serial = der[f[i][3]:f[i][2]]                              # whole INTEGER TLV
+    issuer_name = der[f[i + 2][3]:f[i + 2][2]]                 # whole issuer Name TLV
+    sf = _tbs_fields(issuer_der)
+    j = 1 if sf[0][0] == 0xA0 else 0
+    _, spki_s, spki_e = _der_read(issuer_der, sf[j + 5][3])
+    parts = _children(issuer_der, spki_s, spki_e)
+    key = issuer_der[parts[1][1] + 1:parts[1][2]]              # subjectPublicKey bits (skip unused-bits byte)
+
+    def tlv(tag, body):
+        n = len(body)
+        head = bytes([tag, n]) if n < 128 else bytes([tag, 0x80 | ((n.bit_length() + 7) // 8)]) + n.to_bytes((n.bit_length() + 7) // 8, "big")
+        return head + body
+    sha1 = tlv(0x30, tlv(0x06, bytes.fromhex("2b0e03021a")) + b"\x05\x00")
+    return tlv(0x30, sha1 + tlv(0x04, hashlib.sha1(issuer_name).digest())
+               + tlv(0x04, hashlib.sha1(key).digest()) + serial)
+
+
+def build_ocsp_request(cert_id: bytes) -> bytes:
+    def tlv(tag, body):
+        n = len(body)
+        head = bytes([tag, n]) if n < 128 else bytes([tag, 0x80 | ((n.bit_length() + 7) // 8)]) + n.to_bytes((n.bit_length() + 7) // 8, "big")
+        return head + body
+    return tlv(0x30, tlv(0x30, tlv(0x30, tlv(0x30, cert_id))))   # OCSPRequest > TBSRequest > requestList > Request
+
+
+def parse_ocsp_response(data: bytes, cert_id: bytes):
+    """-> (state, detail): state is good/revoked/unknown/error. Does not verify the responder's signature."""
+    try:
+        _, s0, e0 = _der_read(data, 0)
+        top = _children(data, s0, e0)
+        code = int.from_bytes(data[top[0][1]:top[0][2]], "big")
+        if code != 0:
+            return "error", "responder answered %s" % OCSP_STATUS.get(code, "status %d" % code)
+        _, rs, re_ = _der_read(data, top[1][1])                # responseBytes SEQUENCE
+        rb = _children(data, rs, re_)
+        _, os_, oe = _der_read(data, rb[1][3])                 # OCTET STRING holding BasicOCSPResponse
+        basic = data[os_:oe]
+        _, bs, be = _der_read(basic, 0)
+        _, ts, te = _der_read(basic, bs)                       # tbsResponseData
+        fields = _children(basic, ts, te)
+        k = 1 if fields[0][0] == 0xA0 else 0
+        singles = fields[k + 2]                                # after responderID, producedAt
+        for _, ss, se, _ in _children(basic, singles[1], singles[2]):
+            sr = _children(basic, ss, se)
+            if basic[sr[0][3]:sr[0][2]] != cert_id:
+                continue
+            st = sr[1]
+            if st[0] == 0x80:
+                return "good", "good"
+            if st[0] == 0xA1:
+                return "revoked", "revoked"
+            return "unknown", "responder does not know this certificate"
+        return "error", "response is for a different certificate"
+    except (IndexError, ValueError):
+        return "error", "unparseable OCSP response"
+
+
+def ocsp_query(url: str, cert_id: bytes, timeout: float):
+    if not url.lower().startswith(("http://", "https://")):
+        return "error", "unsupported responder URL scheme"
+    req = urllib.request.Request(url, data=build_ocsp_request(cert_id),
+                                 headers={"Content-Type": "application/ocsp-request", "Accept": "application/ocsp-response"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            body = r.read(1 << 20)
+    except Exception as e:
+        return "error", "responder %s unreachable: %s" % (url, e)
+    return parse_ocsp_response(body, cert_id)
 
 
 class StartTLSError(OSError):
@@ -292,7 +435,7 @@ def _permissive_context():
 
 
 def check_host(host: str, port: int, warn_days: int, timeout: float = 10, starttls: str = "",
-               scan_protocols: bool = True) -> dict:
+               scan_protocols: bool = True, ocsp: bool = False) -> dict:
     result = {"host": host, "port": port, "starttls": starttls or None, "findings": [], "ok": True}
     ctx = ssl.create_default_context()
     ctx.check_hostname = True
@@ -418,6 +561,31 @@ def check_host(host: str, port: int, warn_days: int, timeout: float = 10, startt
             elif left <= warn_days:
                 finding("HIGH", f"Chain certificate '{entry['subject']}' expires in {left} day(s).")
 
+    # OCSP: responder URL and must-staple from the certificate; --ocsp also asks the responder
+    if der:
+        urls, must_staple = ocsp_info(der)
+        result["ocsp"] = {"urls": urls, "must_staple": must_staple}
+        if ocsp:
+            if not urls:
+                result["ocsp"]["status"] = "no-responder"
+                if must_staple:
+                    finding("MEDIUM", "Certificate is must-staple but names no OCSP responder.")
+            elif not chain or len(chain) < 2:
+                result["ocsp"]["status"] = "skipped"
+                finding("LOW", "OCSP not checked: the issuer certificate is needed and the server's chain "
+                               "is unavailable (needs Python 3.13+ and a server that sends its intermediate).")
+            else:
+                state, detail = ocsp_query(urls[0], ocsp_cert_id(der, chain[1]), timeout)
+                result["ocsp"]["status"] = state
+                if state == "revoked":
+                    finding("HIGH", "Certificate has been REVOKED (OCSP responder %s)." % urls[0])
+                elif state == "unknown":
+                    finding("MEDIUM", "OCSP responder %s does not know this certificate." % urls[0])
+                elif state == "error":
+                    finding("LOW", "OCSP check failed: %s." % detail)
+        if must_staple:
+            result["ocsp"]["note"] = "must-staple: clients refuse the certificate if the server does not staple a response"
+
     # Every protocol version the server accepts, not just the negotiated one
     if scan_protocols:
         offered = probe_protocols(host, port, timeout, starttls)
@@ -458,6 +626,11 @@ def render_text(results: list) -> str:
         if r.get("key"):
             k = r["key"]
             lines.append(f"  Key: {k['type']} {k['bits'] or '?'} bits" + (f" ({k['curve']})" if k.get("curve") else ""))
+        o = r.get("ocsp")
+        if o and (o.get("urls") or o.get("must_staple")):
+            lines.append("  OCSP: " + (o["urls"][0] if o.get("urls") else "no responder URL")
+                         + ("   must-staple" if o.get("must_staple") else "")
+                         + (f"   status: {o['status']}" if o.get("status") else ""))
         for f in r["findings"]:
             lines.append(f"  [{f['severity']}] {f['message']}")
         lines.append("")
@@ -512,6 +685,8 @@ def main(argv=None):
                     help="don't try each TLS version separately (one handshake per host instead of five)")
     ap.add_argument("--fail-on", choices=["high", "medium", "low", "never"], default="high",
                     help="lowest severity that makes the exit code 1 (default: high)")
+    ap.add_argument("--ocsp", action="store_true",
+                    help="ask the certificate's OCSP responder whether it is revoked (needs the server's chain: Python 3.13+)")
     args = ap.parse_args(argv)
 
     specs = list(args.hosts)
@@ -532,7 +707,7 @@ def main(argv=None):
         parsed = [parse_target(s, args.starttls) for s in specs]
     except ValueError as e:
         ap.error(f"bad [scheme://]host[:port]: {e}")
-    results = [check_host(h, p, args.warn_days, args.timeout, st, not args.no_protocol_scan) for h, p, st in parsed]
+    results = [check_host(h, p, args.warn_days, args.timeout, st, not args.no_protocol_scan, args.ocsp) for h, p, st in parsed]
 
     if args.json:
         print(json.dumps(results, indent=2))

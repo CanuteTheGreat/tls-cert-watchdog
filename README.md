@@ -20,7 +20,7 @@ warning page.
 
 ```sh
 pipx install git+https://git.canutethegreat.com/CanuteTheGreat/tls-cert-watchdog.git        # latest release branch; puts `tls-cert-watchdog` on PATH
-pipx install git+https://git.canutethegreat.com/CanuteTheGreat/tls-cert-watchdog.git@v1.2.0  # a pinned release
+pipx install git+https://git.canutethegreat.com/CanuteTheGreat/tls-cert-watchdog.git@v1.3.0  # a pinned release
 brew install canutethegreat/errant-tools/tls-cert-watchdog   # after: brew tap canutethegreat/errant-tools https://git.canutethegreat.com/CanuteTheGreat/homebrew-errant-tools
 scoop install errant-tools/tls-cert-watchdog                 # after: scoop bucket add errant-tools https://git.canutethegreat.com/CanuteTheGreat/scoop-errant-tools
 ```
@@ -71,6 +71,9 @@ Exit codes (same convention as every Errant Solutions tool):
 - **The chain the server sends** (Python 3.13+): every certificate's subject, issuer
   and expiry, and an intermediate that expires within `--warn-days` is HIGH
 - Missing Subject Alternative Names (legacy CN-only certs)
+- **OCSP and must-staple**: the certificate's OCSP responder URL and must-staple flag are
+  reported; `--ocsp` asks the responder whether the certificate is revoked (HIGH if revoked;
+  needs the server's chain, so Python 3.13+). The responder's signature is not verified.
 
 Expiry, SAN, key and signature details are reported even when verification fails
 (expired, self-signed, wrong hostname). `--timeout SECONDS` sets the
@@ -92,7 +95,7 @@ with alerting, dashboards, and SLOs.
 
 ## Roadmap ideas (not yet built)
 - Webhook/Slack notification mode
-- OCSP stapling / revocation checks
+- Checking that the server actually staples an OCSP response (needs a TLS client the stdlib does not have)
 - (HSTS and other security headers: see http-header-auditor)
 
 ## Tests

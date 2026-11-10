@@ -64,7 +64,7 @@
   },
   {
    "id": "signature",
-   "text": "Certificate signature algorithm — flags MD5/SHA-1 signatures",
+   "text": "Certificate signature algorithm \u2014 flags MD5/SHA-1 signatures",
    "tests": [
     "tests/test_cert_watch.py::TestCertChecks::test_sha1_signature_is_flagged",
     "tests/test_accuracy.py::TestVerificationAgainstOpenSSL::test_verification_verdicts",
@@ -86,6 +86,20 @@
    "tests": [
     "tests/test_cert_watch.py::TestCertChecks::test_cn_only_cert_flags_missing_san",
     "tests/test_contract.py::TestSignatureAndSan::test_signature_oid_and_missing_san"
+   ]
+  },
+  {
+   "id": "ocsp",
+   "text": "OCSP and must-staple",
+   "tests": [
+    "tests/test_ocsp.py::TestParsing::test_url_and_must_staple_read_from_certificate",
+    "tests/test_ocsp.py::TestParsing::test_must_staple_without_responder_is_medium",
+    "tests/test_ocsp.py::TestOcspVerdicts::test_tool_matches_openssl_ocsp_client",
+    "tests/test_ocsp.py::TestOcspVerdicts::test_cli_revoked_is_high_and_fails",
+    "tests/test_ocsp.py::TestOcspVerdicts::test_cli_good_is_clean"
+   ],
+   "flags": [
+    "--ocsp"
    ]
   },
   {

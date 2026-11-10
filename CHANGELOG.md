@@ -4,6 +4,15 @@ All notable changes. Versions are git tags; each tag has a Forgejo release with 
 
 ## Unreleased
 
+## 1.3.0 - 2026-11-10
+
+- **OCSP and must-staple**: every certificate's OCSP responder URL (Authority Information Access) and
+  its TLS Feature must-staple flag are now reported (`ocsp` in `--json`, an `OCSP:` line in the text
+  report). New `--ocsp` flag asks the responder whether the certificate is revoked (HIGH when revoked,
+  MEDIUM when the responder does not know it, LOW when the check cannot be made, e.g. the server's
+  chain is unavailable before Python 3.13). A must-staple certificate with no responder is MEDIUM.
+  The responder's signature is not verified (stdlib only); verdicts are tested against `openssl ocsp`.
+
 - Tests: accuracy suite against `openssl s_client` (9 certificate variants incl. a missing intermediate and a full chain; 6 server protocol ranges, every version compared), mutation testing (nightly), claims ledger. No detection differences were found.
 
 ## 1.2.0 - 2026-10-16

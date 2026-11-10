@@ -79,7 +79,7 @@ class PKI:
         return key, cert
 
     def leaf(self, name, days_valid=90, not_before_days=-1, sans=("localhost",), self_signed=False,
-             algorithm=None, key=None, issuer_pair=None):
+             algorithm=None, key=None, issuer_pair=None, extensions=()):
         key = key or _key()
         issuer_key, issuer = (key, _name("localhost")) if self_signed else (self.ca_key, self.ca_cert.subject)
         if issuer_pair:
@@ -95,6 +95,8 @@ class PKI:
         b = b.add_extension(x509.ExtendedKeyUsage([x509.oid.ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
         if sans:
             b = b.add_extension(x509.SubjectAlternativeName([x509.DNSName(s) for s in sans]), critical=False)
+        for ext in extensions:
+            b = b.add_extension(ext, critical=False)
         cert = b.sign(issuer_key, algorithm or hashes.SHA256())
         cert_path = os.path.join(self.tmp, name + ".crt")
         key_path = os.path.join(self.tmp, name + ".key")
