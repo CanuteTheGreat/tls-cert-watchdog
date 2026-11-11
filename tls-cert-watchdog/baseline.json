@@ -1,6 +1,14 @@
 {
  "id": "tls-cert-watchdog",
- "last_full": null,
- "sha": "93b661feeb47947982e302124d91fbc0c67c01e4",
- "survivors": []
+ "last_full": "2026-11-11",
+ "sha": "5b2a2144ccb3e4a54cfba09bf4886972da1babf1",
+ "survivors": [
+  "cert_watch.x__negotiate_starttls__mutmut_95",
+  "cert_watch.x_main__mutmut_162",
+  "cert_watch.x_main__mutmut_165",
+  "cert_watch.x_parse_host__mutmut_24",
+  "cert_watch.x_parse_host__mutmut_25",
+  "cert_watch.x_parse_host__mutmut_27",
+  "cert_watch.x_parse_target__mutmut_2"
+ ]
 }
