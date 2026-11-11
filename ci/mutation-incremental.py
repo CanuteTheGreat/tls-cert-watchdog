@@ -525,6 +525,8 @@ def main():
     m.add_argument("--diff", required=True)
     m.add_argument("--mutants", default="mutants")
     m.add_argument("--sample", type=int, default=1)
+    u = sub.add_parser("publish")
+    u.add_argument("--id", required=True)
     g = sub.add_parser("gate")
     g.add_argument("--id", required=True)
     g.add_argument("--kind", required=True, choices=["cargo", "pit", "mutmut"])
@@ -539,6 +541,14 @@ def main():
         cmd_plan(a)
     elif a.cmd == "mutmut-targets":
         cmd_mutmut_targets(a)
+    elif a.cmd == "publish":
+        # ci/mutation.sh runs the gate inside its sibling container, which has neither GITHUB_ACTIONS nor
+        # the checkout's push credentials, so the baseline it wrote reached only the runner's actions/cache
+        # (which `plan` ignores once the store branch exists): the full run's survivors were never known
+        # and the next incremental run flagged all of them as new (tls-cert-watchdog run 63).
+        # Run on the job side, after the container, to push what the gate wrote.
+        if os.path.exists(os.path.join(state_dir(a.id), "baseline.json")):
+            store_push(a.id)
     else:
         cmd_gate(a)
 

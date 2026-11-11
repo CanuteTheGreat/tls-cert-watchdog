@@ -49,6 +49,10 @@ jobs:
       - name: Mutation testing (mutmut, capped container)
         if: env.MUT_MODE != 'skip'
         run: sh ci/mutation.sh 3.13
+      - name: Publish the baseline the gate wrote (shared store branch)
+        # the gate runs inside mutation.sh's container, which cannot push; publish from the job side
+        if: env.MUT_MODE != 'skip'
+        run: python3 ci/mutation-incremental.py publish --id tls-cert-watchdog
 
   python-matrix:
     # colo-light: a short test run in ci/run-tests.sh's own 1g container, like test.yml; colo-x86_64's
