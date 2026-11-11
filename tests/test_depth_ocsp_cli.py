@@ -270,14 +270,16 @@ class TestConnectDefaults(unittest.TestCase):
         c.assert_called_once_with("h.test", 443, 3, "")
 
     def test_chain_ders_converts_objects_and_keeps_bytes(self):
-        if not hasattr(getattr(ssl, "_ssl", None), "ENCODING_DER"):
-            self.skipTest("this Python's ssl has no ENCODING_DER")
         class Cert:
             def public_bytes(self, enc):
                 return b"obj-" + repr(enc == ssl._ssl.ENCODING_DER).encode()
 
         sock = types.SimpleNamespace(get_unverified_chain=lambda: [b"raw", Cert()])
-        self.assertEqual(cert_watch._chain_ders(sock), [b"raw", b"obj-True"])
+        if hasattr(getattr(ssl, "_ssl", None), "ENCODING_DER"):
+            self.assertEqual(cert_watch._chain_ders(sock), [b"raw", b"obj-True"])
+        else:  # older ssl: converting a certificate object fails, and the chain is reported unavailable
+            self.assertIsNone(cert_watch._chain_ders(sock))
+        self.assertEqual(cert_watch._chain_ders(types.SimpleNamespace(get_unverified_chain=lambda: [b"r"])), [b"r"])
         self.assertIsNone(cert_watch._chain_ders(types.SimpleNamespace()))
 
 
