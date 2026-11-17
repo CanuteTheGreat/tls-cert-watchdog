@@ -28,7 +28,7 @@ errors -- CI/cron friendly.
 
 Copyright (c) 2026 Errant Solutions. MIT licensed.
 """
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 import argparse
 import datetime
@@ -610,7 +610,7 @@ def _dn(parts):
     return ", ".join("%s=%s" % kv for rdn in parts for kv in rdn)
 
 
-def render_text(results: list) -> str:
+def render_text(results: list, show_chain: bool = False) -> str:
     lines = ["TLS Certificate Watchdog Report", "=" * 40, ""]
     for r in results:
         status = "OK" if r["ok"] else "ISSUES FOUND"
@@ -631,12 +631,44 @@ def render_text(results: list) -> str:
             lines.append("  OCSP: " + (o["urls"][0] if o.get("urls") else "no responder URL")
                          + ("   must-staple" if o.get("must_staple") else "")
                          + (f"   status: {o['status']}" if o.get("status") else ""))
+        if show_chain:
+            if r.get("chain"):
+                lines.append("  Chain sent by the server:")
+                for i, c in enumerate(r["chain"]):
+                    lines.append(f"    {i}: {c['subject'] or '?'}  <- {c['issuer'] or '?'}  (expires {c['not_after'] or '?'})")
+            else:
+                lines.append("  Chain: not available (needs Python 3.13+ or the handshake failed)")
         for f in r["findings"]:
             lines.append(f"  [{f['severity']}] {f['message']}")
         lines.append("")
     n_bad = sum(1 for r in results if not r["ok"])
     lines.append(f"Summary: {n_bad}/{len(results)} host(s) with HIGH-severity findings.")
     return "\n".join(lines)
+
+
+def webhook_payload(results: list, gate: tuple) -> dict:
+    """Slack/Discord/generic JSON body: `text` (Slack, Mattermost), `content` (Discord) and the findings."""
+    hits = [(r, f) for r in results for f in r["findings"] if f["severity"] in gate]
+    lines = ["tls-cert-watchdog: %d finding(s) on %d host(s)" % (len(hits), len({r["host"] + ":" + str(r["port"]) for r, _ in hits}))]
+    lines += ["[%s] %s:%s %s" % (f["severity"], r["host"], r["port"], f["message"]) for r, f in hits]
+    text = "\n".join(lines)[:1900]
+    return {"text": text, "content": text,
+            "findings": [{"host": r["host"], "port": r["port"], "severity": f["severity"], "message": f["message"]}
+                         for r, f in hits]}
+
+
+def send_webhook(url: str, payload: dict, timeout: float):
+    """POST the payload as JSON; returns an error string or None."""
+    if not url.lower().startswith(("http://", "https://")):
+        return "webhook URL must start with http:// or https://"
+    req = urllib.request.Request(url, json.dumps(payload).encode(), {"Content-Type": "application/json",
+                                                                       "User-Agent": "tls-cert-watchdog/" + __version__})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            resp.read()
+    except Exception as e:
+        return "webhook failed: %s" % e
+    return None
 
 
 def parse_target(spec: str, starttls=None):
@@ -687,6 +719,10 @@ def main(argv=None):
                     help="lowest severity that makes the exit code 1 (default: high)")
     ap.add_argument("--ocsp", action="store_true",
                     help="ask the certificate's OCSP responder whether it is revoked (needs the server's chain: Python 3.13+)")
+    ap.add_argument("--chain", action="store_true",
+                    help="list every certificate the server sent (subject, issuer, expiry) in the text report (Python 3.13+)")
+    ap.add_argument("--webhook", metavar="URL",
+                    help="POST a JSON summary (Slack/Discord/Mattermost compatible) to URL when there are findings at or above --fail-on (not sent with --fail-on never)")
     args = ap.parse_args(argv)
 
     specs = list(args.hosts)
@@ -712,10 +748,15 @@ def main(argv=None):
     if args.json:
         print(json.dumps(results, indent=2))
     else:
-        print(render_text(results))
+        print(render_text(results, args.chain))
 
     gate = {"high": ("HIGH",), "medium": ("HIGH", "MEDIUM"), "low": ("HIGH", "MEDIUM", "LOW"), "never": ()}[args.fail_on]
-    return 1 if any(f["severity"] in gate for r in results for f in r["findings"]) else 0
+    hit = any(f["severity"] in gate for r in results for f in r["findings"])
+    if args.webhook and hit:
+        err = send_webhook(args.webhook, webhook_payload(results, gate), args.timeout)
+        if err:
+            print(err, file=sys.stderr)
+    return 1 if hit else 0
 
 
 if __name__ == "__main__":

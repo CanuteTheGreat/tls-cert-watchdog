@@ -226,6 +226,20 @@
     ".forgejo/workflows/test.yml#python: [\"3.8",
     ".forgejo/workflows/nightly.yml#python: [\"3.8"
    ]
+  },
+  {
+   "id": "chain-webhook",
+   "text": "`--chain` lists every certificate the server sent",
+   "tests": [
+    "tests/test_chain_webhook.py::TestChain::test_chain_listed_only_with_flag",
+    "tests/test_chain_webhook.py::TestChain::test_chain_unavailable_is_said",
+    "tests/test_chain_webhook.py::TestWebhook::test_posts_findings_at_or_above_gate",
+    "tests/test_chain_webhook.py::TestWebhook::test_nothing_sent_when_clean_or_below_gate_or_never"
+   ],
+   "flags": [
+    "--chain",
+    "--webhook"
+   ]
   }
  ]
 }

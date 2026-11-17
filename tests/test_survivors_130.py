@@ -471,7 +471,9 @@ EXPECTED_HELP = (
     "--timeout TIMEOUT per-connection timeout in seconds (default 10) "
     "--no-protocol-scan don't try each TLS version separately (one handshake per host instead of five) "
     "--fail-on {high,medium,low,never} lowest severity that makes the exit code 1 (default: high) "
-    "--ocsp ask the certificate's OCSP responder whether it is revoked (needs the server's chain: Python 3.13+)")
+    "--ocsp ask the certificate's OCSP responder whether it is revoked (needs the server's chain: Python 3.13+) "
+    "--chain list every certificate the server sent (subject, issuer, expiry) in the text report (Python 3.13+) "
+    "--webhook URL POST a JSON summary (Slack/Discord/Mattermost compatible) to URL when there are findings at or above --fail-on (not sent with --fail-on never)")
 
 
 class TestHelpBody(unittest.TestCase):

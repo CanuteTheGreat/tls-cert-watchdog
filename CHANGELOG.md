@@ -4,6 +4,11 @@ All notable changes. Versions are git tags; each tag has a Forgejo release with 
 
 ## Unreleased
 
+## 1.4.0 - 2026-11-16
+
+- **`--chain`** prints every certificate the server sent (subject, issuer, expiry) in the text report.
+- **`--webhook URL`** POSTs a JSON summary (`text` for Slack/Mattermost, `content` for Discord, plus a `findings` list) when there are findings at or above `--fail-on`; a failed POST is reported on stderr and never changes the exit code.
+
 ## 1.3.0 - 2026-11-10
 
 - **OCSP and must-staple**: every certificate's OCSP responder URL (Authority Information Access) and
