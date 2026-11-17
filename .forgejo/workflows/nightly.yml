@@ -79,3 +79,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install from every documented channel and run it
         run: sh ci/install-channels.sh 3.13
+
+  pip-audit:
+    # new advisories appear without any push: re-audit every night (blocking, like test.yml's audit job)
+    runs-on: colo-light-x86_64
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: pip-audit (capped container)
+        run: sh ci/pip-audit.sh 3.13
