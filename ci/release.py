@@ -6,7 +6,8 @@ Steps, all of which must pass or the job fails:
   2. build the sdist + wheel in a throwaway, resource-capped python container
   3. install the wheel into a fresh venv there and check `<command> --version` prints X.Y.Z
      and `<command> --help` exits 0
-  4. write SHA256SUMS for the standalone script, the wheel and the sdist
+  4. write SHA256SUMS for the standalone script, the wheel and the sdist, and sign it
+     (ci/sign-sha256sums.sh: detached SHA256SUMS.asc, verified with gpgv; fails without the key)
   5. create (or update) the Forgejo release with the changelog section as notes and
      upload every file + SHA256SUMS as release assets, then download each asset back
      and re-check its hash
@@ -163,6 +164,9 @@ def main():
         for n, h in sums.items():
             f.write("%s  %s\n" % (h, n))
     print(open(sums_path).read())
+    # sign SHA256SUMS with the release key (fails the job if the key is missing or anything does not verify)
+    sh("sh", "ci/sign-sha256sums.sh", sums_path)
+    sig_path = sums_path + ".asc"
 
     repo_url = "%s/%s" % (os.environ.get("GITHUB_SERVER_URL", "https://git.canutethegreat.com").rstrip("/"),
                           os.environ["GITHUB_REPOSITORY"])
@@ -182,12 +186,12 @@ def main():
     else:
         rel = api.call("POST", "/releases", {"tag_name": tag, "name": "%s %s" % (dist_name, tag), "body": body,
                                              "draft": False, "prerelease": False})
-    for f in files + [sums_path]:
+    for f in files + [sums_path, sig_path]:
         api.upload(rel["id"], f)
     # read every asset back and verify it byte-for-byte against SHA256SUMS
     rel = api.call("GET", "/releases/%d" % rel["id"])
     got = {a["name"]: a["browser_download_url"] for a in rel["assets"]}
-    want = set(sums) | {"SHA256SUMS"}
+    want = set(sums) | {"SHA256SUMS", "SHA256SUMS.asc"}
     if set(got) != want:
         sys.exit("release assets %s != expected %s" % (sorted(got), sorted(want)))
     for n, h in sums.items():
