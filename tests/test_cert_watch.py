@@ -239,7 +239,7 @@ class Base(unittest.TestCase):
     def check(self, port, *extra, host="localhost"):
         p = self.run_tool("--json", *extra, f"{host}:{port}")
         self.assertIn(p.returncode, (0, 1), p.stderr)
-        res = json.loads(p.stdout)
+        res = json.loads(p.stdout)["results"]
         self.assertEqual(len(res), 1)
         return p.returncode, res[0], " | ".join(f["severity"] + " " + f["message"] for f in res[0]["findings"])
 
@@ -454,7 +454,7 @@ class TestDepth(Base):
                 self.assertIn("MEDIUM Server still accepts legacy", msgs)
                 self.assertEqual(code, 0, msgs)
                 p = self.run_tool("--json", "%s://localhost:%d" % (proto, port))
-                self.assertEqual(json.loads(p.stdout)[0]["starttls"], proto)
+                self.assertEqual(json.loads(p.stdout)["results"][0]["starttls"], proto)
 
     def test_smtp_without_starttls_is_high(self):
         port = self.serve("nost", server_kwargs={"starttls": "smtp-nostarttls"})

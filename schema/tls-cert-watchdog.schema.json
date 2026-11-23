@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "tls-cert-watchdog --json output (schema_version 1)",
+  "type": "object",
+  "required": ["schema_version", "tool", "version", "exit_code", "results"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "tool": {"type": "string", "const": "tls-cert-watchdog"},
+    "version": {"type": "string"},
+    "exit_code": {"type": "integer", "enum": [0, 1]},
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["host", "port", "starttls", "findings", "ok"],
+        "properties": {
+          "host": {"type": "string"},
+          "port": {"type": "integer"},
+          "starttls": {"type": ["string", "null"]},
+          "ok": {"type": "boolean"},
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["severity", "message"],
+              "properties": {
+                "severity": {"type": "string", "enum": ["HIGH", "MEDIUM", "LOW"]},
+                "message": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -64,7 +64,7 @@
   },
   {
    "id": "signature",
-   "text": "Certificate signature algorithm \u2014 flags MD5/SHA-1 signatures",
+   "text": "Certificate signature algorithm — flags MD5/SHA-1 signatures",
    "tests": [
     "tests/test_cert_watch.py::TestCertChecks::test_sha1_signature_is_flagged",
     "tests/test_accuracy.py::TestVerificationAgainstOpenSSL::test_verification_verdicts",
@@ -161,16 +161,45 @@
   },
   {
    "id": "exit-codes",
-   "text": "Exit codes (same convention as every Errant Solutions tool)",
+   "text": "| 3 | unexpected runtime error |",
    "tests": [
     "tests/test_cert_watch.py::TestCli::test_all_healthy_exit_zero",
     "tests/test_cert_watch.py::TestCli::test_no_hosts_is_usage_error",
     "tests/test_cert_watch.py::TestCli::test_bad_port_is_usage_error",
     "tests/test_cert_watch.py::TestDepth::test_no_tls13_is_low",
-    "tests/test_contract.py::TestCliContract::test_fail_on_levels"
+    "tests/test_contract.py::TestCliContract::test_fail_on_levels",
+    "tests/test_cli_contract.py::TestExitCodes::test_clean_is_0",
+    "tests/test_cli_contract.py::TestExitCodes::test_findings_is_1",
+    "tests/test_cli_contract.py::TestExitCodes::test_bad_args_is_2_with_message_on_stderr",
+    "tests/test_cli_contract.py::TestExitCodes::test_missing_input_file_is_2",
+    "tests/test_cli_contract.py::TestExitCodes::test_unreachable_host_keeps_documented_legacy_code_1",
+    "tests/test_cli_contract.py::TestExitCodes::test_unexpected_error_is_3_on_stderr_not_a_traceback_exit_1"
    ],
    "flags": [
     "--fail-on"
+   ]
+  },
+  {
+   "id": "quiet",
+   "text": "prints nothing on stdout, so the exit code is the whole answer",
+   "flags": [
+    "--quiet"
+   ],
+   "tests": [
+    "tests/test_cli_contract.py::TestQuiet::test_quiet_prints_nothing_but_keeps_exit_code",
+    "tests/test_cli_contract.py::TestQuiet::test_quiet_still_posts_the_webhook",
+    "tests/test_cli_contract.py::TestQuiet::test_without_quiet_the_report_is_printed"
+   ]
+  },
+  {
+   "id": "json-schema",
+   "text": "`schema_version` (currently 1)",
+   "tests": [
+    "tests/test_cli_contract.py::TestJson::test_clean",
+    "tests/test_cli_contract.py::TestJson::test_findings",
+    "tests/test_cli_contract.py::TestJson::test_usage_error_leaves_stdout_empty",
+    "tests/test_cli_contract.py::TestJson::test_runtime_error_leaves_stdout_empty",
+    "tests/test_cli_contract.py::TestJson::test_schema_rejects_a_document_without_the_contract_keys"
    ]
   },
   {

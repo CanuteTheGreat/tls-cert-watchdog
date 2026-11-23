@@ -452,8 +452,8 @@ class TestCliContract(Base):
             f.write("# my hosts\n\n   \nlocalhost:%d   # web # really\n" % port)
         p = self.run_tool("--json", "--no-protocol-scan", "--file", hosts)
         self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertTrue(p.stdout.startswith('[\n  {\n    "host": "localhost",\n    "port": %d,' % port))
-        self.assertEqual([(r["host"], r["port"]) for r in json.loads(p.stdout)], [("localhost", port)])
+        self.assertTrue(p.stdout.startswith('{\n  "schema_version": 1,\n  "tool": "tls-cert-watchdog",'))
+        self.assertEqual([(r["host"], r["port"]) for r in json.loads(p.stdout)["results"]], [("localhost", port)])
         p = self.run_tool("--file", os.path.join(self.tmp, "missing.txt"))
         self.assertEqual(p.returncode, 2)
         self.assertIn("error: can't read --file: [Errno 2] No such file or directory", p.stderr)
@@ -465,7 +465,7 @@ class TestCliContract(Base):
         port = self.serve("n", days_valid=200)
         p = self.run_tool("--json", "--no-protocol-scan", "--starttls", "none", "smtp://localhost:%d" % port)
         self.assertEqual(p.returncode, 0, p.stderr)
-        r = json.loads(p.stdout)[0]
+        r = json.loads(p.stdout)["results"][0]
         self.assertEqual((r["starttls"], r["findings"]), (None, []))
 
     def test_target_parsing_edges(self):

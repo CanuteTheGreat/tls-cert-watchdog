@@ -20,7 +20,7 @@ warning page.
 
 ```sh
 pipx install git+https://git.canutethegreat.com/CanuteTheGreat/tls-cert-watchdog.git        # latest release branch; puts `tls-cert-watchdog` on PATH
-pipx install git+https://git.canutethegreat.com/CanuteTheGreat/tls-cert-watchdog.git@v1.4.0  # a pinned release
+pipx install git+https://git.canutethegreat.com/CanuteTheGreat/tls-cert-watchdog.git@v2.0.0  # a pinned release
 brew install canutethegreat/errant-tools/tls-cert-watchdog   # after: brew tap canutethegreat/errant-tools https://git.canutethegreat.com/CanuteTheGreat/homebrew-errant-tools
 scoop install errant-tools/tls-cert-watchdog                 # after: scoop bucket add errant-tools https://git.canutethegreat.com/CanuteTheGreat/scoop-errant-tools
 ```
@@ -49,13 +49,21 @@ tls-cert-watchdog --fail-on medium example.com         # stricter CI gate
 STARTTLS is picked automatically from the scheme or the well-known port (25/587
 SMTP, 143 IMAP, 110 POP3, 21 FTP, 5432 PostgreSQL); `--starttls none` turns it off.
 
-Exit codes (same convention as every Errant Solutions tool):
+## Exit codes and JSON output
+
+Exit codes (the shared Errant Solutions CLI contract, see [docs/CLI-CONTRACT.md](docs/CLI-CONTRACT.md)):
 
 | Code | Meaning |
 |---|---|
 | 0 | no finding at or above `--fail-on` (default `high`) on any host |
 | 1 | at least one such finding (expired, expiring soon, untrusted, legacy protocol accepted, weak cipher/signature/key...) |
-| 2 | usage error |
+| 2 | usage error, or a `--file` that can't be read |
+| 3 | unexpected runtime error |
+
+Legacy, kept so existing scripts keep working: a host that can't be reached is reported as a HIGH finding ("Connection failed"), so it gives exit `1`, not `3`.
+
+`--json` prints one object: `schema_version` (currently 1), `tool`, `version`, `exit_code` and `results` (the per-host list that was the whole output before 2.0.0); the JSON Schema is [schema/tls-cert-watchdog.schema.json](schema/tls-cert-watchdog.schema.json).
+`--quiet` (`-q`) prints nothing on stdout, so the exit code is the whole answer (`--webhook` still fires; errors always go to stderr).
 
 ## What it checks
 

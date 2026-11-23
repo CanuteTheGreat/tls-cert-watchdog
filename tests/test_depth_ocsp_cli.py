@@ -4,6 +4,7 @@ a few DER/target helpers). Network handshakes are replaced; OCSP answers come fr
 import contextlib
 import datetime
 import io
+import json
 import os
 import re
 import ssl
@@ -523,7 +524,8 @@ class TestMain(unittest.TestCase):
     def test_json_output(self):
         code, out, _, _ = self.run_main("a.test", "--json")
         self.assertIn('"host": "a.test"', out)
-        self.assertIn('\n    "port": 443', out)  # indent=2 inside a list
+        self.assertIn('\n      "port": 443', out)  # indent=2 inside results inside the object
+        self.assertEqual(json.loads(out)["results"][0]["host"], "a.test")
 
     def test_help_text(self):
         code, out, _, _ = self.run_main("--help")

@@ -21,14 +21,18 @@ Usage:
 STARTTLS is used automatically for smtp:// submission:// imap:// pop3:// ftp://
 postgres:// targets and for the well-known ports 25, 587, 143, 110, 21 and 5432.
 
-Exit code: 0 if no host has a finding at or above --fail-on (default high:
-expired, expiring within --warn-days, untrusted/mismatched, a legacy protocol
-accepted, weak cipher, signature algorithm or key), 1 otherwise, 2 on usage
-errors -- CI/cron friendly.
+Exit codes (shared CLI contract): 0 if no host has a finding at or above
+--fail-on (default high: expired, expiring within --warn-days,
+untrusted/mismatched, a legacy protocol accepted, weak cipher, signature
+algorithm or key), 1 if one has, 2 on usage or input errors, 3 on an
+unexpected runtime error. An unreachable host is, as before, a HIGH finding
+("Connection failed") and so exit 1 (legacy; it is not exit 3). --quiet prints
+nothing to stdout. --json prints one object with schema_version, tool, version,
+exit_code and results -- CI/cron friendly.
 
 Copyright (c) 2026 Errant Solutions. MIT licensed.
 """
-__version__ = "1.4.0"
+__version__ = "2.0.0"
 
 import argparse
 import datetime
@@ -704,6 +708,15 @@ def parse_host(spec: str, default_port: int = 443):
 
 
 def main(argv=None):
+    """Entry point. Any unexpected exception is a runtime error (exit 3), never a bare traceback exit 1."""
+    try:
+        return _main(argv)
+    except Exception as exc:  # SystemExit (argparse usage errors, exit 2) is not an Exception
+        print("tls-cert-watchdog: error: %s: %s" % (type(exc).__name__, exc), file=sys.stderr)
+        return 3
+
+
+def _main(argv=None):
     ap = argparse.ArgumentParser(prog="tls-cert-watchdog", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--version", action="version", version="%(prog)s " + __version__)
     ap.add_argument("hosts", nargs="*", help="[scheme://]host[:port] to check (schemes: smtp, submission, imap, pop3, ftp, postgres, https)")
@@ -712,6 +725,7 @@ def main(argv=None):
                     help="force a STARTTLS protocol for every target (default: from the scheme or well-known port)")
     ap.add_argument("--warn-days", type=int, default=14, help="HIGH-severity threshold for days until expiry (default 14)")
     ap.add_argument("--json", action="store_true", help="machine-readable JSON output")
+    ap.add_argument("-q", "--quiet", action="store_true", help="print nothing to stdout (exit code and stderr errors only)")
     ap.add_argument("--timeout", type=float, default=10, help="per-connection timeout in seconds (default 10)")
     ap.add_argument("--no-protocol-scan", action="store_true",
                     help="don't try each TLS version separately (one handshake per host instead of five)")
@@ -723,6 +737,8 @@ def main(argv=None):
                     help="list every certificate the server sent (subject, issuer, expiry) in the text report (Python 3.13+)")
     ap.add_argument("--webhook", metavar="URL",
                     help="POST a JSON summary (Slack/Discord/Mattermost compatible) to URL when there are findings at or above --fail-on (not sent with --fail-on never)")
+    ap.epilog = ("Exit codes: 0 clean, 1 findings (an unreachable host is a HIGH finding, legacy), "
+                 "2 usage or input error, 3 unexpected error.")
     args = ap.parse_args(argv)
 
     specs = list(args.hosts)
@@ -745,18 +761,22 @@ def main(argv=None):
         ap.error(f"bad [scheme://]host[:port]: {e}")
     results = [check_host(h, p, args.warn_days, args.timeout, st, not args.no_protocol_scan, args.ocsp) for h, p, st in parsed]
 
-    if args.json:
-        print(json.dumps(results, indent=2))
+    gate = {"high": ("HIGH",), "medium": ("HIGH", "MEDIUM"), "low": ("HIGH", "MEDIUM", "LOW"), "never": ()}[args.fail_on]
+    hit = any(f["severity"] in gate for r in results for f in r["findings"])
+    code = 1 if hit else 0
+    if args.quiet:
+        pass
+    elif args.json:
+        print(json.dumps({"schema_version": 1, "tool": "tls-cert-watchdog", "version": __version__,
+                          "exit_code": code, "results": results}, indent=2))
     else:
         print(render_text(results, args.chain))
 
-    gate = {"high": ("HIGH",), "medium": ("HIGH", "MEDIUM"), "low": ("HIGH", "MEDIUM", "LOW"), "never": ()}[args.fail_on]
-    hit = any(f["severity"] in gate for r in results for f in r["findings"])
     if args.webhook and hit:
         err = send_webhook(args.webhook, webhook_payload(results, gate), args.timeout)
         if err:
             print(err, file=sys.stderr)
-    return 1 if hit else 0
+    return code
 
 
 if __name__ == "__main__":
