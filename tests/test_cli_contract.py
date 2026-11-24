@@ -71,7 +71,7 @@ class TestExitCodes(Contract):
         buf = io.StringIO()
         with mock.patch.object(tool, "check_host", side_effect=ValueError("bad")), redirect_stderr(buf):
             self.assertEqual(tool.main(["a.test"]), 3)
-        self.assertIn("tls-cert-watchdog: error: ValueError: bad", buf.getvalue())
+        self.assertEqual(buf.getvalue(), "tls-cert-watchdog: error: ValueError: bad\n")
 
 
 class TestJson(Contract):
