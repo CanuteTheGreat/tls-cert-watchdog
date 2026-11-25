@@ -1,6 +1,6 @@
 {
  "id": "tls-cert-watchdog",
- "last_full": "2026-11-24",
+ "last_full": "2026-11-25",
  "sha": "f92f7423156eaf756b838e43010fc6befbb486f0",
  "survivors": [
   "cert_watch.x__main__mutmut_210",
