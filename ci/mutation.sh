@@ -67,7 +67,7 @@ trap cleanup EXIT INT TERM
 # killed slow runs on the shared colo lane with exit 137 (aws-waste-finder, 2026-10-18)
 # --cpus matches CHILDREN (one pytest per child) and the shared lane's 3-CPU EC2 slots (rw-man-02..05).
 # shellcheck disable=SC2086
-docker run -d --name "$NAME" --memory "$MEMORY" --memory-swap "$MEMORY" --cpus 3 --pids-limit 2048 \
+docker run -d --name "$NAME" --label "rustinion.ci.job=${HOSTNAME:-ci}" --memory "$MEMORY" --memory-swap "$MEMORY" --cpus 3 --pids-limit 2048 \
   ${EXTRA_DOCKER_ARGS:-} "$IMAGE" sleep 14400 >/dev/null
 docker cp . "$NAME:/src"
 rc=0
